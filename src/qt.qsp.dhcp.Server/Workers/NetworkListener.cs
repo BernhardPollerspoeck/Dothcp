@@ -20,10 +20,10 @@ public class NetworkListener(IGrainFactory grainFactory)
 				{
 					var result = await listener.ReceiveAsync(stoppingToken);
 
-					var parserGrain = grainFactory.GetGrain<IMessageParserGrain>(result.RemoteEndPoint.ToString());//TODO: check id
+					var parserGrain = grainFactory.GetGrain<IMessageParserGrain>(Guid.NewGuid().ToString());
 					var message = await parserGrain.Parse(result.Buffer);
 
-					var mac = message.GetMacAddress();//TODO: why leading 01?
+					var mac = message.GetMacAddress();
 					if (mac is not null)
 					{
 						var leaseGrain = grainFactory.GetGrain<IDhcpLeaseGrain>(mac);
