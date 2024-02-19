@@ -23,7 +23,7 @@ public class MessageParserGrain : Grain, IMessageParserGrain
 				BitConverter.ToUInt32(buffer, 30),
 				BitConverter.ToUInt32(buffer, 34),
 			],
-			Options = ReadOptions(buffer[240..^2])
+			Options = ReadOptions(buffer[240..])
 		});
 	}
 
@@ -35,6 +35,10 @@ public class MessageParserGrain : Grain, IMessageParserGrain
 		while (bufferQueue.Count > 0)
 		{
 			var option = (EOption)bufferQueue.Dequeue();
+			if (option is EOption.End)
+			{
+				break;
+			}
 			var length = bufferQueue.Dequeue();
 			var data = Enumerable
 				.Range(1, length)

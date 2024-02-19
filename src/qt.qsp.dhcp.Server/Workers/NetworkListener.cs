@@ -23,14 +23,15 @@ public class NetworkListener(IGrainFactory grainFactory)
 					var parserGrain = grainFactory.GetGrain<IMessageParserGrain>(Guid.NewGuid().ToString());
 					var message = await parserGrain.Parse(result.Buffer);
 
-					var mac = message.GetMacAddress();
-					if (mac is not null)
+					var id = message.GetClientId();
+					if (id is not null)
 					{
-						var leaseGrain = grainFactory.GetGrain<IDhcpLeaseGrain>(mac);
+						var leaseGrain = grainFactory.GetGrain<IDhcpLeaseGrain>(id);
 						var clientResponseMessage = await leaseGrain.HandleMessage(message);
 						if (clientResponseMessage is not null)
 						{
-							//TODO: await listener.SendAsync(clientResponseMessage.Data, clientResponseMessage.Data.Length, result.RemoteEndPoint);
+							var responseData = clientResponseMessage.ToData().ToArray();
+							await listener.SendAsync(responseData, responseData.Length, result.RemoteEndPoint);
 						}
 
 					}

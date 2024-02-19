@@ -1,4 +1,6 @@
-﻿namespace qt.qsp.dhcp.Server.Models;
+﻿using System.Net;
+
+namespace qt.qsp.dhcp.Server.Models;
 
 [GenerateSerializer]
 public class DhcpMessage
@@ -27,6 +29,11 @@ public class DhcpMessage
 	[Id(10)]
 	public required DhcpOption[] Options { get; init; }
 
+
+	public string GetClientId()
+	{
+		return string.Join(',', ClientHardwareAdresses);
+	}
 	public string? GetMacAddress()
 	{
 		var option = Options
@@ -38,6 +45,60 @@ public class DhcpMessage
 		var option = Options
 			.FirstOrDefault(o => o.Option is EOption.DhcpMessageType);
 		return option is null ? EMessageType.Unknown : (EMessageType)option.Data[0];
+	}
+
+	public IEnumerable<byte> ToData()
+	{
+		yield return (byte)Direction;
+		yield return (byte)HardwareType;
+		yield return ClientIdLength;
+		yield return Hops;
+		foreach (var tid in BitConverter.GetBytes(TransactionId))
+		{
+			yield return tid;
+		}
+		foreach (var rct in BitConverter.GetBytes((uint)ResponseCastType))
+		{
+			yield return rct;
+		}
+		foreach (var cia in BitConverter.GetBytes(ClientIpAdress))
+		{
+			yield return cia;
+		}
+		foreach (var aia in BitConverter.GetBytes(AssigneeAdress))
+		{
+			yield return aia;
+		}
+		foreach (var sia in BitConverter.GetBytes(ServerIpAdress))
+		{
+			yield return sia;
+		}
+		foreach (var gw in IPAddress.Parse("192.168.0.1").GetAddressBytes())//TODO: correct
+		{
+			yield return gw;
+		}
+		foreach (var chia in ClientHardwareAdresses.SelectMany(BitConverter.GetBytes))
+		{
+			yield return chia;
+		}
+		foreach (var bootp in Enumerable.Range(0, 192))
+		{
+			yield return 0;
+		}
+		yield return 0x63;
+		yield return 0x82;
+		yield return 0x53;
+		yield return 0x63;
+
+		foreach (var option in Options)
+		{
+			yield return (byte)option.Option;
+			yield return (byte)option.Data.Length;
+			foreach (var data in option.Data)
+			{
+				yield return data;
+			}
+		}
 	}
 }
 

@@ -1,5 +1,6 @@
 ﻿using Microsoft.AspNetCore.Authentication;
 using qt.qsp.dhcp.Server.Models;
+using qt.qsp.dhcp.Server.Models.OptionBuilder;
 using System.Net;
 
 namespace qt.qsp.dhcp.Server.Grains;
@@ -42,8 +43,38 @@ public class DhcpLeaseGrain
 	#region message handling
 	public async Task<DhcpMessage?> HandleDiscover(DhcpMessage message)
 	{
-		return null;
 
+		//TODO create offer
+		//store offer
+		//integrate offer and settings
+
+		//TODO: propper values
+		return new DhcpMessage
+		{
+			Direction = EMessageDirection.Reply,
+			HardwareType = message.HardwareType,
+			ClientIdLength = message.ClientIdLength,
+			Hops = 0,
+			TransactionId = message.TransactionId,
+			ResponseCastType = message.ResponseCastType,
+			ClientIpAdress = BitConverter.ToUInt32(IPAddress.Parse("0.0.0.0").GetAddressBytes()),
+			AssigneeAdress = BitConverter.ToUInt32(IPAddress.Parse("192.168.0.200").GetAddressBytes()),
+			ServerIpAdress = BitConverter.ToUInt32(IPAddress.Parse("127.0.0.1").GetAddressBytes()),
+			ClientHardwareAdresses = message.ClientHardwareAdresses,
+			Options = new DhcpOptionsBuilder()
+				.AddMessageType(EMessageType.Offer)
+				.AddServerIdentifier("123.123.123.123")
+				.AddAddressLeaseTime(TimeSpan.FromHours(24))
+				.AddRenewalTime(TimeSpan.FromHours(12))
+				.AddRebindingTime(TimeSpan.FromHours(21))
+				.AddSubnetMask("255.255.255.0")
+				.AddBroadcastAddressOption("192.168.0.255")
+				.AddRouterOption(["192.168.0.1"])
+				.AddDnsServerOptions(["192.168.0.1"])
+				.AddInterfaceMtuOption(1500)
+				.AddTimeOffset(DateTime.Now - DateTime.UtcNow)
+				.Build()
+		};
 	}
 	public async Task<DhcpMessage?> HandleRequest(DhcpMessage message)
 	{
