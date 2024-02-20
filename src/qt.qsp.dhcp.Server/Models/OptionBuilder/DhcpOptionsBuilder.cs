@@ -1,13 +1,15 @@
-﻿using Microsoft.AspNetCore.Routing;
-using System;
-using System.Net;
+﻿using System.Net;
+using qt.qsp.dhcp.Server.Models.Enumerations;
 
 namespace qt.qsp.dhcp.Server.Models.OptionBuilder;
 
 public class DhcpOptionsBuilder
 {
+	#region fields
 	private readonly List<DhcpOption> _options = [];
+	#endregion
 
+	#region builder methods
 	public DhcpOptionsBuilder AddMessageType(EMessageType type)
 	{
 		_options.Add(new()
@@ -17,12 +19,12 @@ public class DhcpOptionsBuilder
 		});
 		return this;
 	}
-	public DhcpOptionsBuilder AddServerIdentifier(string serverIdentifier)
+	public DhcpOptionsBuilder AddServerIdentifier(IPAddress serverIdentifier)
 	{
 		_options.Add(new()
 		{
 			Option = EOption.DhcpServerIdentifier,
-			Data = IPAddress.Parse(serverIdentifier).GetAddressBytes(),
+			Data = serverIdentifier.GetAddressBytes(),
 		});
 		return this;
 	}
@@ -79,7 +81,6 @@ public class DhcpOptionsBuilder
 	}
 	public DhcpOptionsBuilder AddRouterOption(string[] routerOptions)
 	{
-		//TODO: check if mandatory
 		if (routerOptions.Length < 1)
 		{
 			throw new InvalidDataException("At least 1 router is required");
@@ -93,7 +94,6 @@ public class DhcpOptionsBuilder
 	}
 	public DhcpOptionsBuilder AddDnsServerOptions(string[] dnsServers)
 	{
-		//TODO: check if mandatory
 		if (dnsServers.Length < 1)
 		{
 			return this;
@@ -127,8 +127,9 @@ public class DhcpOptionsBuilder
 		});
 		return this;
 	}
+	#endregion
 
-
+	#region build
 	public DhcpOption[] Build()
 	{
 		_options.Add(new()
@@ -138,4 +139,5 @@ public class DhcpOptionsBuilder
 		});
 		return [.. _options];
 	}
+	#endregion
 }

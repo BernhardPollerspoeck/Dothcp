@@ -1,10 +1,13 @@
 ﻿using System.Net;
+using qt.qsp.dhcp.Server.Models.Enumerations;
 
 namespace qt.qsp.dhcp.Server.Models;
 
 [GenerateSerializer]
+[Alias("DhcpMessage")]
 public class DhcpMessage
 {
+	#region properties
 	[Id(0)]
 	public required EMessageDirection Direction { get; init; }
 	[Id(1)]
@@ -25,14 +28,15 @@ public class DhcpMessage
 	[Id(8)]
 	public required uint ServerIpAdress { get; init; }
 	[Id(9)]
-	public required uint[] ClientHardwareAdresses { get; init; }
+	public required byte[] ClientHardwareAdress { get; init; }
 	[Id(10)]
 	public required DhcpOption[] Options { get; init; }
+	#endregion
 
-
+	#region data conversion helper
 	public string GetClientId()
 	{
-		return string.Join(',', ClientHardwareAdresses);
+		return BitConverter.ToString(ClientHardwareAdress);
 	}
 	public string? GetMacAddress()
 	{
@@ -77,7 +81,7 @@ public class DhcpMessage
 		{
 			yield return gw;
 		}
-		foreach (var chia in ClientHardwareAdresses.SelectMany(BitConverter.GetBytes))
+		foreach (var chia in ClientHardwareAdress)
 		{
 			yield return chia;
 		}
@@ -100,14 +104,5 @@ public class DhcpMessage
 			}
 		}
 	}
-}
-
-public enum EMessageType : byte
-{
-	Unknown = 0,
-	Discover = 1,//client message to gather offers
-	Offer = 2,//server message offer of a lease
-	Request = 3,//client requests the ip of an offer
-
-	Ack = 4,//server confirms the request
+	#endregion
 }

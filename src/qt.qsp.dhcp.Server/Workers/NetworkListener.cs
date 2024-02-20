@@ -1,54 +1,83 @@
 ﻿
 using System.Net.Sockets;
 using System.Net;
-using System.Text;
 using qt.qsp.dhcp.Server.Grains;
+using qt.qsp.dhcp.Server.Models;
+using qt.qsp.dhcp.Server.Models.Enumerations;
 
 namespace qt.qsp.dhcp.Server.Workers;
 
 public class NetworkListener(IGrainFactory grainFactory)
 	: BackgroundService
 {
+	#region BackgroundService
 	protected override async Task ExecuteAsync(CancellationToken stoppingToken)
 	{
-		var listener = new UdpClient(67);
-		try
+		using var listener = new UdpClient(67);
+		while (!stoppingToken.IsCancellationRequested)
 		{
-			while (!stoppingToken.IsCancellationRequested)
+			try
 			{
-				try
-				{
-					var result = await listener.ReceiveAsync(stoppingToken);
+				var incommingData = await listener.ReceiveAsync(stoppingToken);
+				var incommingMessage = await ParseMessage(incommingData.Buffer);
 
-					var parserGrain = grainFactory.GetGrain<IMessageParserGrain>(Guid.NewGuid().ToString());
-					var message = await parserGrain.Parse(result.Buffer);
-
-					var id = message.GetClientId();
-					if (id is not null)
-					{
-						var leaseGrain = grainFactory.GetGrain<IDhcpLeaseGrain>(id);
-						var clientResponseMessage = await leaseGrain.HandleMessage(message);
-						if (clientResponseMessage is not null)
-						{
-							var responseData = clientResponseMessage.ToData().ToArray();
-							await listener.SendAsync(responseData, responseData.Length, result.RemoteEndPoint);
-						}
-
-					}
-				}
-				catch (TaskCanceledException)
+				var id = incommingMessage.GetClientId();
+				if (id is null)
 				{
-					//TODO: log shutdown
+					continue;
 				}
-				catch (SocketException e)
+
+				var responseMessage = await GetResponseMessage(id, incommingMessage);
+				if (responseMessage is null)
 				{
-					//TODO: handle error 
+					continue;
 				}
+
+				await SendResponse(
+					responseMessage: responseMessage,
+					client: listener,
+					responseCastType: incommingMessage.ResponseCastType,
+					clientAddress: incommingMessage.ClientIpAdress,
+					remoteEndpoint: incommingData.RemoteEndPoint);
+			}
+			catch (TaskCanceledException)
+			{
+				//TODO: log shutdown
+			}
+			catch (SocketException)
+			{
+				//TODO: handle error 
 			}
 		}
-		finally
-		{
-			listener.Close();
-		}
 	}
+	#endregion
+
+	#region data handling
+	private Task<DhcpMessage> ParseMessage(byte[] buffer)
+	{
+		var parserGrain = grainFactory.GetGrain<IMessageParserGrain>(Guid.NewGuid().ToString());
+		return parserGrain.Parse(buffer);
+	}
+
+	private Task<DhcpMessage?> GetResponseMessage(string id, DhcpMessage message)
+	{
+		var leaseGrain = grainFactory.GetGrain<IDhcpLeaseGrain>(id);
+		return leaseGrain.HandleMessage(message);
+	}
+	private static Task<int> SendResponse(
+		DhcpMessage responseMessage,
+		UdpClient client,
+		EResponseCastType responseCastType,
+		uint clientAddress,
+		IPEndPoint? remoteEndpoint)
+	{
+		var responseData = responseMessage.ToData().ToArray();
+		return client.SendAsync(
+			responseData,
+			responseData.Length,
+			responseCastType is EResponseCastType.Broadcast || clientAddress is 0x00000000 || remoteEndpoint is null
+				? new IPEndPoint(IPAddress.Parse("255.255.255.255"), 68)
+				: remoteEndpoint);
+	}
+	#endregion
 }

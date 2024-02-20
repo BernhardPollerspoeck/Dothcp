@@ -1,7 +1,9 @@
 ﻿using Microsoft.AspNetCore.Authentication;
 using qt.qsp.dhcp.Server.Models;
+using qt.qsp.dhcp.Server.Models.Enumerations;
 using qt.qsp.dhcp.Server.Models.OptionBuilder;
 using System.Net;
+using System.Net.Sockets;
 
 namespace qt.qsp.dhcp.Server.Grains;
 
@@ -40,10 +42,24 @@ public class DhcpLeaseGrain
 	}
 	#endregion
 
+	public static IPAddress GetLocalIpAddress()
+	{
+		return Dns
+			.GetHostEntry(Dns.GetHostName())
+			.AddressList
+			.FirstOrDefault(a => a is { AddressFamily: AddressFamily.InterNetwork })
+			?? throw new Exception("No network adapters with an IPv4 address in the system!");
+	}
 	#region message handling
 	public async Task<DhcpMessage?> HandleDiscover(DhcpMessage message)
 	{
+		//choose:
+		//- previous
+		//-requested(option)
+		//-from pool
+		var localIp = GetLocalIpAddress();
 
+		//TODO: ParameterRequestList
 		//TODO create offer
 		//store offer
 		//integrate offer and settings
@@ -58,20 +74,15 @@ public class DhcpLeaseGrain
 			TransactionId = message.TransactionId,
 			ResponseCastType = message.ResponseCastType,
 			ClientIpAdress = BitConverter.ToUInt32(IPAddress.Parse("0.0.0.0").GetAddressBytes()),
-			AssigneeAdress = BitConverter.ToUInt32(IPAddress.Parse("192.168.0.200").GetAddressBytes()),
-			ServerIpAdress = BitConverter.ToUInt32(IPAddress.Parse("127.0.0.1").GetAddressBytes()),
-			ClientHardwareAdresses = message.ClientHardwareAdresses,
+			AssigneeAdress = BitConverter.ToUInt32(IPAddress.Parse("192.168.0.200").GetAddressBytes()),//TODO: offer
+			ServerIpAdress = BitConverter.ToUInt32(localIp.GetAddressBytes()),
+			ClientHardwareAdress = message.ClientHardwareAdress,
 			Options = new DhcpOptionsBuilder()
-				.AddMessageType(EMessageType.Offer)
-				.AddServerIdentifier("123.123.123.123")
 				.AddAddressLeaseTime(TimeSpan.FromHours(24))
+				.AddMessageType(EMessageType.Offer)
+				.AddServerIdentifier(localIp)
 				.AddRenewalTime(TimeSpan.FromHours(12))
 				.AddRebindingTime(TimeSpan.FromHours(21))
-				.AddSubnetMask("255.255.255.0")
-				.AddBroadcastAddressOption("192.168.0.255")
-				.AddRouterOption(["192.168.0.1"])
-				.AddDnsServerOptions(["192.168.0.1"])
-				.AddInterfaceMtuOption(1500)
 				.AddTimeOffset(DateTime.Now - DateTime.UtcNow)
 				.Build()
 		};

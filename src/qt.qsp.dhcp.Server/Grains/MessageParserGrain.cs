@@ -1,9 +1,11 @@
 ﻿using qt.qsp.dhcp.Server.Models;
+using qt.qsp.dhcp.Server.Models.Enumerations;
 
 namespace qt.qsp.dhcp.Server.Grains;
 
 public class MessageParserGrain : Grain, IMessageParserGrain
 {
+	#region IMessageParserGrain
 	public Task<DhcpMessage> Parse(byte[] buffer)
 	{
 		return Task.FromResult(new DhcpMessage
@@ -17,16 +19,13 @@ public class MessageParserGrain : Grain, IMessageParserGrain
 			ClientIpAdress = BitConverter.ToUInt32(buffer, 10),
 			AssigneeAdress = BitConverter.ToUInt32(buffer, 14),
 			ServerIpAdress = BitConverter.ToUInt32(buffer, 18),
-			ClientHardwareAdresses = [
-				BitConverter.ToUInt32(buffer, 22),
-				BitConverter.ToUInt32(buffer, 26),
-				BitConverter.ToUInt32(buffer, 30),
-				BitConverter.ToUInt32(buffer, 34),
-			],
+			ClientHardwareAdress = buffer[22..38],
 			Options = ReadOptions(buffer[240..])
 		});
 	}
+	#endregion
 
+	#region readers
 	private DhcpOption[] ReadOptions(byte[] optionsBuffer)
 	{
 		var bufferQueue = new Queue<byte>(optionsBuffer);
@@ -53,4 +52,5 @@ public class MessageParserGrain : Grain, IMessageParserGrain
 
 		return [.. options];
 	}
+	#endregion
 }

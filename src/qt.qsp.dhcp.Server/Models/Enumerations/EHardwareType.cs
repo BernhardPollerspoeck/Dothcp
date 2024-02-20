@@ -1,4 +1,4 @@
-﻿namespace qt.qsp.dhcp.Server.Models;
+﻿namespace qt.qsp.dhcp.Server.Models.Enumerations;
 
 public enum EHardwareType : byte
 {
