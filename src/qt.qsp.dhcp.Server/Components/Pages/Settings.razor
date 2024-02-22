@@ -1,0 +1,70 @@
+﻿@page "/settings"
+@using qt.qsp.dhcp.Server.Constants
+@using qt.qsp.dhcp.Server.Grains
+
+@inject IClusterClient ClusterClient
+
+
+
+<h3>Settings</h3>
+
+<p>Range Low: @RangeLow</p>
+<p>Range High: @RangeHigh</p>
+<p>Lease Time: @LeaseTime</p>
+<p>Renewal Time: @RenewalTime</p>
+<p>Rebinding Time: @RebindingTime</p>
+<p>Subnet: @Subnet</p>
+<p>Router: @Router</p>
+
+@if (Dns is not null)
+{
+	<p>Dns:</p>
+	<ul>
+		@foreach (var d in Dns)
+		{
+			<li>
+				<p>- @d</p>
+			</li>
+		}
+
+	</ul>
+}
+
+
+@code {
+
+	public byte RangeLow { get; private set; }
+	public byte RangeHigh { get; private set; }
+
+	public TimeSpan LeaseTime { get; private set; }
+	public TimeSpan RenewalTime { get; private set; }
+	public TimeSpan RebindingTime { get; private set; }
+
+	public string? Subnet { get; private set; }
+	public string? Router { get; private set; }
+
+	public string[]? Dns { get; private set; }
+
+	protected override async Task OnInitializedAsync()
+	{
+		RangeLow = await GetSettingsValue<byte>(SettingsConstants.DHCP_RANGE_LOW);
+		RangeHigh = await GetSettingsValue<byte>(SettingsConstants.DHCP_RANGE_HIGH);
+		LeaseTime = await GetSettingsValue<TimeSpan>(SettingsConstants.DHCP_LEASE_TIME);
+		RenewalTime = await GetSettingsValue<TimeSpan>(SettingsConstants.DHCP_LEASE_RENEWAL);
+		RebindingTime = await GetSettingsValue<TimeSpan>(SettingsConstants.DHCP_LEASE_REBINDING);
+		Subnet = await GetSettingsValue<string>(SettingsConstants.DHCP_LEASE_SUBNET);
+		Router = await GetSettingsValue<string>(SettingsConstants.DHCP_LEASE_ROUTER);
+		Dns = await GetSettingsValue<string[]>(SettingsConstants.DHCP_LEASE_DNS);
+
+		await base.OnInitializedAsync();
+	}
+
+
+
+	private async Task<TResult> GetSettingsValue<TResult>(string key)
+	{
+		return await ClusterClient
+			.GetGrain<ISettingsGrain>(key)
+			.GetValue<TResult>();
+	}
+}

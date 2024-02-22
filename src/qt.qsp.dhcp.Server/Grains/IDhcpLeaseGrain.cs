@@ -1,4 +1,5 @@
 ﻿using Microsoft.AspNetCore.Authentication;
+using qt.qsp.dhcp.Server.Constants;
 using qt.qsp.dhcp.Server.Models;
 using qt.qsp.dhcp.Server.Models.Enumerations;
 using qt.qsp.dhcp.Server.Models.OptionBuilder;
@@ -78,11 +79,11 @@ public class DhcpLeaseGrain
 			ServerIpAdress = BitConverter.ToUInt32(localIp.GetAddressBytes()),
 			ClientHardwareAdress = message.ClientHardwareAdress,
 			Options = new DhcpOptionsBuilder()
-				.AddAddressLeaseTime(TimeSpan.FromHours(24))
+				.AddAddressLeaseTime(await GrainFactory.GetGrain<ISettingsGrain>(SettingsConstants.DHCP_LEASE_TIME).GetValue<TimeSpan>())
 				.AddMessageType(EMessageType.Offer)
 				.AddServerIdentifier(localIp)
-				.AddRenewalTime(TimeSpan.FromHours(12))
-				.AddRebindingTime(TimeSpan.FromHours(21))
+				.AddRenewalTime(await GrainFactory.GetGrain<ISettingsGrain>(SettingsConstants.DHCP_LEASE_RENEWAL).GetValue<TimeSpan>())
+				.AddRebindingTime(await GrainFactory.GetGrain<ISettingsGrain>(SettingsConstants.DHCP_LEASE_REBINDING).GetValue<TimeSpan>())
 				.AddTimeOffset(DateTime.Now - DateTime.UtcNow)
 				.Build()
 		};
