@@ -61,6 +61,7 @@ public sealed class FileGrainStorage(
 
 		grainState.State = options.GrainStorageSerializer.Deserialize<T>(new BinaryData(storedData));
 		grainState.ETag = fileInfo.LastWriteTimeUtc.ToString();
+		grainState.RecordExists = true;
 	}
 	public async Task WriteStateAsync<T>(
 		string stateName,

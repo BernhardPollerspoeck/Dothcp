@@ -1,6 +1,4 @@
 ﻿using Orleans.Runtime;
-using System.Globalization;
-using System.Reflection.Metadata.Ecma335;
 
 namespace qt.qsp.dhcp.Server.Grains;
 
@@ -34,16 +32,17 @@ public class SettingsGrain(
 	public Task<TResult> GetValue<TResult>()
 	{
 		var val = state.State.Value;
-		var typeHolder = default(TResult);
+		var typeHolder = typeof(TResult).Name;
 		return Task.FromResult(
-			typeHolder switch
+			typeof(TResult).Name switch
 			{//TODO: simplify
-				byte => (TResult)Convert.ChangeType(byte.Parse(val), typeof(TResult)),
+				"Byte" => (TResult)Convert.ChangeType(byte.Parse(val), typeof(TResult)),
+				"Byte[]" => (TResult)Convert.ChangeType(val.Split('.').Select(byte.Parse).ToArray(), typeof(TResult)),
 
-				string => (TResult)Convert.ChangeType(val, typeof(TResult)),
-				string[] => (TResult)Convert.ChangeType(val.Split(';'), typeof(TResult)),
+				"String" => (TResult)Convert.ChangeType(val, typeof(TResult)),
+				"String[]" => (TResult)Convert.ChangeType(val.Split(';'), typeof(TResult)),
 
-				TimeSpan => (TResult)Convert.ChangeType(new TimeSpan(int.Parse(val.Split(':')[0]), int.Parse(val.Split(':')[1]), int.Parse(val.Split(':')[2])), typeof(TResult)),
+				"TimeSpan" => (TResult)Convert.ChangeType(new TimeSpan(int.Parse(val.Split(':')[0]), int.Parse(val.Split(':')[1]), int.Parse(val.Split(':')[2])), typeof(TResult)),
 
 				_ => default!,//TODO: remove !!!!
 			});

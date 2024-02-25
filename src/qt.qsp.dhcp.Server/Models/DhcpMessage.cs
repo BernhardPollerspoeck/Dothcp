@@ -34,6 +34,16 @@ public class DhcpMessage
 	#endregion
 
 	#region data conversion helper
+	public bool HasOption(EOption option)
+	{
+		return Options.Any(o => o.Option == option);
+	}
+	public string GetRequestedAddress()
+	{
+		var option = Options
+			.First(o => o.Option is EOption.AdressRequest);
+		return string.Join('.', option.Data);
+	}
 	public string GetClientId()
 	{
 		return BitConverter.ToString(ClientHardwareAdress);
@@ -49,6 +59,13 @@ public class DhcpMessage
 		var option = Options
 			.FirstOrDefault(o => o.Option is EOption.DhcpMessageType);
 		return option is null ? EMessageType.Unknown : (EMessageType)option.Data[0];
+	}
+	public IEnumerable<byte> GetParameterList()
+	{
+		return Options
+			.FirstOrDefault(o => o.Option is EOption.ParameterList)
+			?.Data 
+			?? [];
 	}
 
 	public IEnumerable<byte> ToData()

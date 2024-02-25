@@ -4,10 +4,11 @@ using System.Net;
 using qt.qsp.dhcp.Server.Grains;
 using qt.qsp.dhcp.Server.Models;
 using qt.qsp.dhcp.Server.Models.Enumerations;
+using Orleans.Iterator.Abstraction.Server;
 
 namespace qt.qsp.dhcp.Server.Workers;
 
-public class NetworkListener(IGrainFactory grainFactory)
+public class NetworkListener(IGrainFactory grainFactory, IServerGrainIterator iterator)
 	: BackgroundService
 {
 	#region BackgroundService
@@ -61,7 +62,7 @@ public class NetworkListener(IGrainFactory grainFactory)
 
 	private Task<DhcpMessage?> GetResponseMessage(string id, DhcpMessage message)
 	{
-		var leaseGrain = grainFactory.GetGrain<IDhcpLeaseGrain>(id);
+		var leaseGrain = grainFactory.GetGrain<IDhcpManagerGrain>(id);
 		return leaseGrain.HandleMessage(message);
 	}
 	private static Task<int> SendResponse(

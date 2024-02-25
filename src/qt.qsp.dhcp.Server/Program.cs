@@ -2,6 +2,7 @@ using qt.qsp.dhcp.Server.Components;
 using qt.qsp.dhcp.Server.FileStorage;
 using qt.qsp.dhcp.Server.StartupTasks;
 using qt.qsp.dhcp.Server.Workers;
+using qt.qsp.dhcp.Server.FileStorage.Iterator;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -20,6 +21,12 @@ builder.Host.UseOrleans(static siloBuilder =>
 
 		 options.RootDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Orleans/GrainState/v1");
 	 });
+
+	siloBuilder.UseFileGrainIterator(o =>
+	{
+		o.RootDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Orleans/GrainState/v1");
+	});
+
 	//siloBuilder.AddMemoryGrainStorage("leases");//TODO: file storage
 	siloBuilder.AddStartupTask<SettingsStartupTask>();
 });
