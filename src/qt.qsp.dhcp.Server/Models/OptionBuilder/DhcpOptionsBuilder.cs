@@ -1,4 +1,5 @@
 ﻿using System.Net;
+using System.Text;
 using qt.qsp.dhcp.Server.Models.Enumerations;
 
 namespace qt.qsp.dhcp.Server.Models.OptionBuilder;
@@ -105,6 +106,19 @@ public class DhcpOptionsBuilder
 		});
 		return this;
 	}
+	public DhcpOptionsBuilder AddNtpServerOptions(string[] ntpServers)
+	{
+		if (ntpServers.Length < 1)
+		{
+			return this;
+		}
+		_options.Add(new()
+		{
+			Option = EOption.NtpServers,
+			Data = ntpServers.Select(o => IPAddress.Parse(o).GetAddressBytes()).SelectMany(o => o).ToArray(),
+		});
+		return this;
+	}
 	public DhcpOptionsBuilder AddInterfaceMtuOption(ushort mtu)
 	{
 		_options.Add(new()
@@ -124,6 +138,24 @@ public class DhcpOptionsBuilder
 			Data = BitConverter.IsLittleEndian
 				? BitConverter.GetBytes((int)timeOffset.TotalSeconds).Reverse().ToArray()
 				: BitConverter.GetBytes((int)timeOffset.TotalSeconds),
+		});
+		return this;
+	}
+	public DhcpOptionsBuilder AddHostName(string hostName)
+	{
+		_options.Add(new()
+		{
+			Option = EOption.HostName,
+			Data = Encoding.UTF8.GetBytes(hostName),
+		});
+		return this;
+	}
+	public DhcpOptionsBuilder AddDomainName(string domainName)
+	{
+		_options.Add(new()
+		{
+			Option = EOption.DomainName,
+			Data = Encoding.UTF8.GetBytes(domainName),
 		});
 		return this;
 	}

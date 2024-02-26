@@ -20,7 +20,8 @@ public class SettingsStartupTask(
 		new(SettingsConstants.DHCP_LEASE_SUBNET, "255.255.255.0"),
 		new(SettingsConstants.DHCP_LEASE_ROUTER, "192.168.0.1"),
 
-		new(SettingsConstants.DHCP_LEASE_DNS, "192.168.0.1;8.8.8.8")
+		new(SettingsConstants.DHCP_LEASE_DNS, "192.168.0.1;8.8.8.8"),
+		new(SettingsConstants.DHCP_LEASE_NTP_SERVERS, "141.76.10.160;134.28.202.2")
 	];
 
 	public async Task Execute(CancellationToken cancellationToken)

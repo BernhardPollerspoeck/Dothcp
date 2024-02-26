@@ -122,8 +122,46 @@ public class DhcpManagerGrain(
 			.AddTimeOffset(DateTime.Now - DateTime.UtcNow);
 
 		var parameters = incomming.GetParameterList();
-		foreach (var item in parameters)
+		foreach (EOption item in parameters)
 		{
+			switch (item)
+			{
+				case EOption.SubnetMask:
+					optionsBuilder.AddSubnetMask(await GrainFactory
+						.GetGrain<ISettingsGrain>(SettingsConstants.DHCP_LEASE_SUBNET)
+						.GetValue<string>());
+					break;
+
+				case EOption.RouterOptions:
+					optionsBuilder.AddRouterOption(await GrainFactory
+						.GetGrain<ISettingsGrain>(SettingsConstants.DHCP_LEASE_ROUTER)
+						.GetValue<string[]>());
+					break;
+
+				case EOption.DnsServerOptions:
+					optionsBuilder.AddDnsServerOptions(await GrainFactory
+						.GetGrain<ISettingsGrain>(SettingsConstants.DHCP_LEASE_DNS)
+						.GetValue<string[]>());
+					break;
+
+				case EOption.HostName:
+					optionsBuilder.AddHostName("Affe mit Waffe");//TODO: how to optain?
+					break;
+
+				case EOption.DomainName:
+					optionsBuilder.AddDomainName("HomeDomain");//TODO: how to optain?
+					break;
+
+				case EOption.BroadcastAddressOption:
+					optionsBuilder.AddBroadcastAddressOption("192.168.0.1");//TODO: how to optain?
+					break;
+
+				case EOption.NtpServers:
+					optionsBuilder.AddNtpServerOptions(await GrainFactory
+						.GetGrain<ISettingsGrain>(SettingsConstants.DHCP_LEASE_NTP_SERVERS)
+						.GetValue<string[]>());
+					break;
+			}
 
 		}
 
