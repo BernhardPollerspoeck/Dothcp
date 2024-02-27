@@ -3,6 +3,9 @@ using qt.qsp.dhcp.Server.FileStorage;
 using qt.qsp.dhcp.Server.StartupTasks;
 using qt.qsp.dhcp.Server.Workers;
 using qt.qsp.dhcp.Server.FileStorage.Iterator;
+using NLog.Web;
+using qt.qsp.dhcp.Server.Services;
+using qt.qsp.dhcp.Server.Grains.DhcpManager;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -11,25 +14,25 @@ builder.Services
 	.AddRazorComponents()
 	.AddInteractiveServerComponents();
 
+builder.Logging.ClearProviders();
+builder.Host.UseNLog();
+
 builder.Host.UseOrleans(static siloBuilder =>
 {
 	siloBuilder.UseLocalhostClustering();
-	siloBuilder.AddFileGrainStorage("File", options =>
-	 {
-		 //string path = Environment.GetFolderPath(
-		 //Environment.SpecialFolder.ApplicationData);
+	siloBuilder.AddFileGrainStorage(
+		"File",
+		options => options.RootDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
+		"Orleans/GrainState/v1"));
+	siloBuilder.UseFileGrainIterator(
+		o => o.RootDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory,
+		"Orleans/GrainState/v1"));
 
-		 options.RootDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Orleans/GrainState/v1");
-	 });
-
-	siloBuilder.UseFileGrainIterator(o =>
-	{
-		o.RootDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "Orleans/GrainState/v1");
-	});
-
-	//siloBuilder.AddMemoryGrainStorage("leases");//TODO: file storage
 	siloBuilder.AddStartupTask<SettingsStartupTask>();
 });
+
+builder.Services.AddTransient<ISettingsLoaderService, SettingsLoaderService>();
+builder.Services.AddTransient<IOfferGeneratorService, OfferGeneratorService>();
 
 builder.Services.AddHostedService<NetworkListener>();
 
@@ -43,7 +46,6 @@ if (!app.Environment.IsDevelopment())
 
 app.UseStaticFiles();
 app.UseAntiforgery();
-
 
 app.MapRazorComponents<App>()
 	.AddInteractiveServerRenderMode();

@@ -1,14 +1,13 @@
-﻿
-using System.Net.Sockets;
+﻿using System.Net.Sockets;
 using System.Net;
-using qt.qsp.dhcp.Server.Grains;
 using qt.qsp.dhcp.Server.Models;
 using qt.qsp.dhcp.Server.Models.Enumerations;
-using Orleans.Iterator.Abstraction.Server;
+using qt.qsp.dhcp.Server.Grains.MessageParser;
+using qt.qsp.dhcp.Server.Grains.DhcpManager;
 
 namespace qt.qsp.dhcp.Server.Workers;
 
-public class NetworkListener(IGrainFactory grainFactory, IServerGrainIterator iterator)
+public class NetworkListener(IGrainFactory grainFactory)
 	: BackgroundService
 {
 	#region BackgroundService

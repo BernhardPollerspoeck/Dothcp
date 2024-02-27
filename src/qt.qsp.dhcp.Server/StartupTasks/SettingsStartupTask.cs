@@ -1,6 +1,6 @@
 ﻿using Orleans.Runtime;
 using qt.qsp.dhcp.Server.Constants;
-using qt.qsp.dhcp.Server.Grains;
+using qt.qsp.dhcp.Server.Grains.Settings;
 
 namespace qt.qsp.dhcp.Server.StartupTasks;
 
