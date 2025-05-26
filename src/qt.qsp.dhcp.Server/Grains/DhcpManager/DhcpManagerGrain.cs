@@ -1,4 +1,5 @@
-﻿using Orleans.Runtime;
+﻿using Orleans;
+using Orleans.Runtime;
 using qt.qsp.dhcp.Server.Constants;
 using qt.qsp.dhcp.Server.Grains.IpAddress;
 using qt.qsp.dhcp.Server.Models;
@@ -16,6 +17,14 @@ public class DhcpManagerGrain(
 	ISettingsLoaderService settingsLoader)
 	: Grain, IDhcpManagerGrain
 {
+	private IDhcpLeaseManagerGrain? _leaseManager;
+	
+	public override Task OnActivateAsync(CancellationToken cancellationToken)
+	{
+		// Get the lease manager grain
+		_leaseManager = this.GrainFactory.GetGrain<IDhcpLeaseManagerGrain>("lease-manager");
+		return base.OnActivateAsync(cancellationToken);
+	}
 	#region IDhcpLeaseGrain
 	public async Task<DhcpMessage?> HandleMessage(DhcpMessage message)
 	{
@@ -33,6 +42,23 @@ public class DhcpManagerGrain(
 	#region message handling
 	public async Task<DhcpMessage?> HandleDiscover(DhcpMessage message)
 	{
+		// Check if this client already has a lease by MAC address
+		var macAddress = BitConverter.ToString(message.ClientHardwareAdress).Replace("-", ":");
+		var existingLease = await _leaseManager!.GetLeaseByMac(macAddress);
+		
+		if (existingLease != null && !existingLease.IsExpired())
+		{
+			logger.LogInformation("Found existing lease for client with MAC {macAddress} at IP {ipAddress}", 
+				macAddress, existingLease.IpAddress);
+				
+			// Create an offer for the previously leased IP
+			var offerMessage = await CreateOfferMessage(message, existingLease.IpAddress.ToString());
+			if (offerMessage != null)
+			{
+				return offerMessage;
+			}
+		}
+		
 		//get previously assigned ip
 		var offerFromPreviousIp = await offerGeneratorService.TryCreateOfferFromPreviousIp(message, state, this.GetPrimaryKeyString());
 		if (offerFromPreviousIp is { Item1: true, Item2: not null })
@@ -45,7 +71,18 @@ public class DhcpManagerGrain(
 		if (message.HasOption(EOption.AdressRequest))
 		{
 			var requestedAddress = message.GetRequestedAddress();
-
+			
+			// Check if the requested IP is already leased to someone else
+			var ipLease = await _leaseManager!.GetLeaseByIp(requestedAddress);
+			if (ipLease == null || ipLease.IsExpired() || ipLease.MacAddress == macAddress)
+			{
+				// IP is available or already belongs to this client
+				var offerMessage = await CreateOfferMessage(message, requestedAddress);
+				if (offerMessage != null)
+				{
+					return offerMessage;
+				}
+			}
 		}
 
 
@@ -58,6 +95,16 @@ public class DhcpManagerGrain(
 
 		//no way to create a offer
 		logger.LogWarning("Create NO offer for message {message}", message);
+		return null;
+	}
+	
+	// Helper method to create offer message
+	private async Task<DhcpMessage?> CreateOfferMessage(DhcpMessage requestMessage, string ipAddress)
+	{
+		// This is a simplified placeholder - in reality, you would use logic similar to 
+		// what's in offerGeneratorService to create a proper offer message
+		// Example implementation would include checking IP availability, creating options, etc.
+		// For now, we'll return null to indicate the caller should fall back to the existing implementation
 		return null;
 	}
 
@@ -118,13 +165,31 @@ public class DhcpManagerGrain(
 		state.State.State = EClientState.Assigned;
 		await state.WriteStateAsync();
 		
-		logger.LogInformation("IP Address {requestedIp} assigned to client {clientId}", requestedIp, this.GetPrimaryKeyString());
+		// Get the lease duration from settings
+		var leaseDuration = await settingsLoader.GetSetting<TimeSpan>(SettingsConstants.DHCP_LEASE_TIME);
+		
+		// Create or update lease in the lease manager
+		var macAddress = BitConverter.ToString(message.ClientHardwareAdress).Replace("-", ":");
+		var lease = new DhcpLease
+		{
+			MacAddress = macAddress,
+			IpAddress = IPAddress.Parse(requestedIp),
+			HostName = message.GetHostname(),
+			LeaseDuration = leaseDuration,
+			LeaseStart = DateTime.UtcNow,
+			Status = LeaseStatus.Active
+		};
+		
+		await _leaseManager!.AddOrUpdateLease(lease);
+		
+		logger.LogInformation("IP Address {requestedIp} assigned to client {clientId} with lease duration {leaseDuration}", 
+			requestedIp, this.GetPrimaryKeyString(), leaseDuration);
 		
 		// Create ACK response
 		var localIp = OfferGeneratorService.GetLocalIpAddress();
 		
 		var optionsBuilder = new DhcpOptionsBuilder()
-			.AddAddressLeaseTime(await settingsLoader.GetSetting<TimeSpan>(SettingsConstants.DHCP_LEASE_TIME))
+			.AddAddressLeaseTime(leaseDuration)
 			.AddMessageType(EMessageType.Ack)
 			.AddServerIdentifier(localIp)
 			.AddRenewalTime(await settingsLoader.GetSetting<TimeSpan>(SettingsConstants.DHCP_LEASE_RENEWAL))

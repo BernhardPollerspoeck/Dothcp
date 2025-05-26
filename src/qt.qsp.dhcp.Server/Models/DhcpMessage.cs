@@ -60,6 +60,14 @@ public class DhcpMessage
 			.FirstOrDefault(o => o.Option is EOption.DhcpMessageType);
 		return option is null ? EMessageType.Unknown : (EMessageType)option.Data[0];
 	}
+	public string? GetHostname()
+	{
+		var option = Options
+			.FirstOrDefault(o => o.Option is EOption.HostName);
+		if (option == null) return null;
+		return System.Text.Encoding.ASCII.GetString(option.Data);
+	}
+	
 	public IEnumerable<byte> GetParameterList()
 	{
 		return Options
