@@ -17,8 +17,7 @@ public class DhcpManagerGrain(
 	ISettingsLoaderService settingsLoader)
 	: Grain, IDhcpManagerGrain
 {
-	// No stored lease manager reference - get on demand when needed
-	#region IDhcpLeaseGrain
+	#region IDhcpManagerGrain
 	public async Task<DhcpMessage?> HandleMessage(DhcpMessage message)
 	{
 		var messageType = message.GetMessageType();
@@ -37,9 +36,9 @@ public class DhcpManagerGrain(
 	{
 		// Check if this client already has a lease by MAC address
 		var macAddress = BitConverter.ToString(message.ClientHardwareAdress).Replace("-", ":");
-		// Get lease manager on demand - use IP subnet as key for better partitioning
-		var leaseManagerGrain = this.GrainFactory.GetGrain<IDhcpLeaseManagerGrain>("lease-manager");
-		var existingLease = await leaseManagerGrain.GetLeaseByMac(macAddress);
+		
+		// Use LeaseGrainSearch to find a lease by MAC
+		var existingLease = await LeaseGrainSearch.FindLeaseByMac(this.GrainFactory, macAddress);
 		
 		if (existingLease != null && !existingLease.IsExpired())
 		{
@@ -68,9 +67,11 @@ public class DhcpManagerGrain(
 			var requestedAddress = message.GetRequestedAddress();
 			
 			// Check if the requested IP is already leased to someone else
-			var ipLeaseManagerGrain = this.GrainFactory.GetGrain<IDhcpLeaseManagerGrain>("lease-manager");
-			var ipLease = await ipLeaseManagerGrain.GetLeaseByIp(requestedAddress);
-			if (ipLease == null || ipLease.IsExpired() || ipLease.MacAddress == macAddress)
+			var leaseGrain = this.GrainFactory.GetGrain<IDhcpLeaseGrain>(requestedAddress);
+			var lease = await leaseGrain.GetLease();
+			var isExpired = await leaseGrain.IsExpired();
+			
+			if (lease == null || isExpired || lease.MacAddress == macAddress)
 			{
 				// IP is available or already belongs to this client
 				var offerMessage = await CreateOfferMessage(message, requestedAddress);
@@ -164,8 +165,8 @@ public class DhcpManagerGrain(
 		// Get the lease duration from settings
 		var leaseDuration = await settingsLoader.GetSetting<TimeSpan>(SettingsConstants.DHCP_LEASE_TIME);
 		
-		// Create or update lease in the lease manager
-		var requestLeaseManagerGrain = this.GrainFactory.GetGrain<IDhcpLeaseManagerGrain>("lease-manager");
+		// Create or update lease in the lease grain directly
+		var leaseGrain = this.GrainFactory.GetGrain<IDhcpLeaseGrain>(requestedIp);
 		var macAddress = BitConverter.ToString(message.ClientHardwareAdress).Replace("-", ":");
 		var lease = new DhcpLease
 		{
@@ -177,7 +178,7 @@ public class DhcpManagerGrain(
 			Status = LeaseStatus.Active
 		};
 		
-		await requestLeaseManagerGrain.AddOrUpdateLease(lease);
+		await leaseGrain.UpdateLease(lease);
 		
 		logger.LogInformation("IP Address {requestedIp} assigned to client {clientId} with lease duration {leaseDuration}", 
 			requestedIp, this.GetPrimaryKeyString(), leaseDuration);
