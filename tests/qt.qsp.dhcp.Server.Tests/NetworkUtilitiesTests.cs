@@ -39,4 +39,59 @@ public class NetworkUtilitiesTests
         // Assert
         Assert.Equal(expectedNetwork, result);
     }
+    
+    [Theory]
+    [InlineData("192.168.1.10", "192.168.1.0", "255.255.255.0", true)]
+    [InlineData("192.168.2.10", "192.168.1.0", "255.255.255.0", false)]
+    [InlineData("10.0.0.5", "10.0.0.0", "255.0.0.0", true)]
+    [InlineData("11.0.0.5", "10.0.0.0", "255.0.0.0", false)]
+    public void IsIpInRange_ShouldReturnCorrectResult(string ipAddress, string networkAddress, string subnetMask, bool expectedResult)
+    {
+        // Act
+        var result = _networkUtilityService.IsIpInRange(ipAddress, networkAddress, subnetMask);
+        
+        // Assert
+        Assert.Equal(expectedResult, result);
+    }
+    
+    [Theory]
+    [InlineData("192.168.1.0", "192.168.1.0", "192.168.1.255", true)]  // Network address
+    [InlineData("192.168.1.255", "192.168.1.0", "192.168.1.255", true)]  // Broadcast address
+    [InlineData("192.168.1.10", "192.168.1.0", "192.168.1.255", false)]  // Regular IP
+    [InlineData("10.0.0.0", "10.0.0.0", "10.255.255.255", true)]  // Network address
+    [InlineData("10.255.255.255", "10.0.0.0", "10.255.255.255", true)]  // Broadcast address
+    public void IsReservedIp_ShouldReturnCorrectResult(string ipAddress, string networkAddress, string broadcastAddress, bool expectedResult)
+    {
+        // Act
+        var result = _networkUtilityService.IsReservedIp(ipAddress, networkAddress, broadcastAddress);
+        
+        // Assert
+        Assert.Equal(expectedResult, result);
+    }
+    
+    [Theory]
+    [InlineData("192.168.1.0", "192.168.1.1")]
+    [InlineData("10.0.0.0", "10.0.0.1")]
+    [InlineData("172.16.0.0", "172.16.0.1")]
+    public void GetFirstUsableIp_ShouldReturnCorrectAddress(string networkAddress, string expectedFirstIp)
+    {
+        // Act
+        var result = _networkUtilityService.GetFirstUsableIp(networkAddress);
+        
+        // Assert
+        Assert.Equal(expectedFirstIp, result);
+    }
+    
+    [Theory]
+    [InlineData("192.168.1.255", "192.168.1.254")]
+    [InlineData("10.255.255.255", "10.255.255.254")]
+    [InlineData("172.16.255.255", "172.16.255.254")]
+    public void GetLastUsableIp_ShouldReturnCorrectAddress(string broadcastAddress, string expectedLastIp)
+    {
+        // Act
+        var result = _networkUtilityService.GetLastUsableIp(broadcastAddress);
+        
+        // Assert
+        Assert.Equal(expectedLastIp, result);
+    }
 }

@@ -38,6 +38,30 @@ public class DhcpMessage
 	{
 		return Options.Any(o => o.Option == option);
 	}
+	
+	// Get the requested IP address from options
+	public IPAddress? RequestedIpAddress
+	{
+		get
+		{
+			if (!HasOption(EOption.AdressRequest))
+			{
+				return null;
+			}
+			
+			try
+			{
+				var option = Options.First(o => o.Option is EOption.AdressRequest);
+				string ipString = string.Join('.', option.Data);
+				return IPAddress.Parse(ipString);
+			}
+			catch
+			{
+				return null;
+			}
+		}
+	}
+	
 	public string GetRequestedAddress()
 	{
 		var option = Options
@@ -102,7 +126,7 @@ public class DhcpMessage
 		{
 			yield return sia;
 		}
-		foreach (var gw in IPAddress.Parse("192.168.0.1").GetAddressBytes())//TODO: correct
+		foreach (var gw in IPAddress.Parse("0.0.0.0").GetAddressBytes())
 		{
 			yield return gw;
 		}

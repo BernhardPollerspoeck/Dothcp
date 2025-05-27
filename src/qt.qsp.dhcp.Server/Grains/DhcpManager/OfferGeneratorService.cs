@@ -1,10 +1,11 @@
-﻿using Orleans.Runtime;
+using Orleans.Runtime;
 using qt.qsp.dhcp.Server.Constants;
 using qt.qsp.dhcp.Server.Grains.IpAddress;
 using qt.qsp.dhcp.Server.Models;
 using qt.qsp.dhcp.Server.Models.Enumerations;
 using qt.qsp.dhcp.Server.Models.OptionBuilder;
 using qt.qsp.dhcp.Server.Services;
+using qt.qsp.dhcp.Server.Utilities;
 using System.Net;
 using System.Net.Sockets;
 
@@ -13,7 +14,8 @@ namespace qt.qsp.dhcp.Server.Grains.DhcpManager;
 public class OfferGeneratorService(
 	ILogger<OfferGeneratorService> logger,
 	ISettingsLoaderService settingsLoader,
-	IGrainFactory grainFactory)
+	IGrainFactory grainFactory,
+	INetworkUtilityService networkUtilityService)
 	: IOfferGeneratorService
 {
 	#region IOfferGeneratorService
@@ -39,27 +41,118 @@ public class OfferGeneratorService(
 		}
 		return (false, null);
 	}
+	
+	public async Task<(bool, DhcpMessage?)> TryCreateOfferFromRequestedIp(DhcpMessage message, IPersistentState<ClientInfo> clientInfo, string clientId)
+	{
+		// Check if the client has requested a specific IP
+		if (message.RequestedIpAddress != null && !string.IsNullOrEmpty(message.RequestedIpAddress.ToString()))
+		{
+			string requestedIp = message.RequestedIpAddress.ToString();
+			
+			// Get the subnet mask and router settings
+			string subnetMask = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
+			var routerBytes = await settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER);
+			string routerIp = string.Join('.', routerBytes);
+			
+			// Calculate the network and broadcast addresses
+			string networkAddress = networkUtilityService.CalculateNetworkAddress(routerIp, subnetMask);
+			string broadcastAddress = networkUtilityService.CalculateBroadcastAddress(routerIp, subnetMask);
+			
+			// Check if the requested IP is valid and within range
+			if (!networkUtilityService.IsIpInRange(requestedIp, networkAddress, subnetMask) || 
+				networkUtilityService.IsReservedIp(requestedIp, networkAddress, broadcastAddress))
+			{
+				logger.LogWarning("Requested IP {requestedIp} is not in valid range or is reserved", requestedIp);
+				return (false, null);
+			}
+			
+			// Check if the requested IP is already in use on the network
+			bool isInUse = await networkUtilityService.IsIpInUseAsync(requestedIp);
+			if (isInUse)
+			{
+				logger.LogWarning("Requested IP {requestedIp} is already in use on the network", requestedIp);
+				return (false, null);
+			}
+			
+			// Check if the IP is available in our system
+			var addressInfo = grainFactory.GetGrain<IIpAddressInformationGrain>(requestedIp);
+			var addressStatus = await addressInfo.GetStatus();
+			
+			if (addressStatus is { Status: EIpAddressStatus.Available } ||
+				(addressStatus is { Status: EIpAddressStatus.Offered or EIpAddressStatus.Claimed } && 
+				 addressStatus.ClientId == clientId))
+			{
+				await addressInfo.SetStatus(EIpAddressStatus.Offered, clientId);
+				
+				clientInfo.State.Address = requestedIp;
+				clientInfo.State.State = EClientState.Offered;
+				await clientInfo.WriteStateAsync();
+				
+				logger.LogInformation("Create offer for {clientAddress} based on client requested address", requestedIp);
+				var offer = await CreateOffer(message, requestedIp);
+				return (offer is not null, offer);
+			}
+			
+			logger.LogWarning("Requested IP {requestedIp} is not available in the system", requestedIp);
+		}
+		
+		return (false, null);
+	}
+	
 	public async Task<(bool, DhcpMessage?)> TryCreateOfferFromRandomIp(DhcpMessage message, IPersistentState<ClientInfo> clientInfo, string clientId)
 	{
+		// Get configuration settings
 		var minAddress = await settingsLoader.GetSetting<byte>(SettingsConstants.DHCP_RANGE_LOW);
 		var maxAddress = await settingsLoader.GetSetting<byte>(SettingsConstants.DHCP_RANGE_HIGH);
-		var router = (await settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER))[0..^1];
-
+		var routerBytes = (await settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER))[0..^1];
+		var subnetMask = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
+		
+		string routerBase = string.Join('.', routerBytes);
+		
+		// Calculate network and broadcast addresses
+		string networkAddress = networkUtilityService.CalculateNetworkAddress($"{routerBase}.0", subnetMask);
+		string broadcastAddress = networkUtilityService.CalculateBroadcastAddress($"{routerBase}.0", subnetMask);
+		
+		// Try to allocate IP sequentially - using a random starting point would be a future enhancement
 		for (var i = minAddress; i <= maxAddress; i++)
 		{
-			var addressInfo = grainFactory.GetGrain<IIpAddressInformationGrain>($"{string.Join('.', router)}.{i}");
+			var ipAddress = $"{string.Join('.', routerBytes)}.{i}";
+			
+			// Skip if this is a reserved address (network or broadcast)
+			if (networkUtilityService.IsReservedIp(ipAddress, networkAddress, broadcastAddress))
+			{
+				continue;
+			}
+			
+			// Check if the IP is already in use on the network (ARP probe)
+			bool isInUse = await networkUtilityService.IsIpInUseAsync(ipAddress);
+			if (isInUse)
+			{
+				continue;
+			}
+			
+			var addressInfo = grainFactory.GetGrain<IIpAddressInformationGrain>(ipAddress);
 			var addressStatus = await addressInfo.GetStatus();
+			
 			if (addressStatus is not { Status: EIpAddressStatus.Available })
 			{
 				continue;
 			}
 
+			// Mark the address as offered
 			await addressInfo.SetStatus(EIpAddressStatus.Offered, clientId);
+			
+			// Update client information
+			clientInfo.State.Address = ipAddress;
+			clientInfo.State.State = EClientState.Offered;
+			await clientInfo.WriteStateAsync();
 
-			logger.LogInformation("Create offer for {clientAddress} based on random address", addressInfo.GetPrimaryKeyString());
-			var offer = await CreateOffer(message, addressInfo.GetPrimaryKeyString());
+			logger.LogInformation("Create offer for {clientAddress} based on random address", ipAddress);
+			var offer = await CreateOffer(message, ipAddress);
 			return (offer is not null, offer);
 		}
+		
+		logger.LogWarning("No available IP addresses to offer");
 		return (false, null);
 	}
 	#endregion
@@ -70,6 +163,12 @@ public class OfferGeneratorService(
 	{
 		var localIp = GetLocalIpAddress();
 
+		// Get subnet mask and router settings
+		string subnetMask = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
+		string routerIp = string.Join('.', await settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER));
+		
+		// Calculate broadcast address
+		string broadcastAddress = networkUtilityService.CalculateBroadcastAddress(routerIp, subnetMask);
 
 		var optionsBuilder = new DhcpOptionsBuilder()
 			.AddAddressLeaseTime(await settingsLoader.GetSetting<TimeSpan>(SettingsConstants.DHCP_LEASE_TIME))
@@ -85,7 +184,7 @@ public class OfferGeneratorService(
 			switch (item)
 			{
 				case EOption.SubnetMask:
-					optionsBuilder.AddSubnetMask(await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET));
+					optionsBuilder.AddSubnetMask(subnetMask);
 					break;
 
 				case EOption.RouterOptions:
@@ -105,16 +204,14 @@ public class OfferGeneratorService(
 					break;
 
 				case EOption.BroadcastAddressOption:
-					optionsBuilder.AddBroadcastAddressOption("192.168.0.255");//TODO: calculate based on router
+					optionsBuilder.AddBroadcastAddressOption(broadcastAddress);
 					break;
 
 				case EOption.NtpServers:
 					optionsBuilder.AddNtpServerOptions(await settingsLoader.GetSetting<string[]>(SettingsConstants.DHCP_LEASE_NTP_SERVERS));
 					break;
 			}
-
 		}
-
 
 		return new DhcpMessage
 		{
@@ -126,7 +223,7 @@ public class OfferGeneratorService(
 			ResponseCastType = incomming.ResponseCastType,
 			ClientIpAdress = BitConverter
 						.ToUInt32(IPAddress
-							.Parse("0.0.0.0")//TODO: value
+							.Parse("0.0.0.0")
 							.GetAddressBytes()),
 			AssigneeAdress = BitConverter
 						.ToUInt32(IPAddress
