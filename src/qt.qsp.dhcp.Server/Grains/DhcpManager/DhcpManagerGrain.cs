@@ -15,10 +15,9 @@ public class DhcpManagerGrain(
 	ILogger<DhcpManagerGrain> logger,
 	IOfferGeneratorService offerGeneratorService,
 	ISettingsLoaderService settingsLoader,
-	IServiceProvider serviceProvider)
+	ILeaseGrainSearchService leaseGrainSearchService)
 	: Grain, IDhcpManagerGrain
 {
-	private IServiceProvider ServiceProvider { get; } = serviceProvider;
 	#region IDhcpManagerGrain
 	public async Task<DhcpMessage?> HandleMessage(DhcpMessage message)
 	{
@@ -39,9 +38,11 @@ public class DhcpManagerGrain(
 		// Check if this client already has a lease by MAC address
 		var macAddress = BitConverter.ToString(message.ClientHardwareAdress).Replace("-", ":");
 		
-		// Use LeaseGrainSearchService to find a lease by MAC
-		var leaseSearchService = ServiceProvider.GetService<ILeaseGrainSearchService>();
-		var existingLease = await leaseSearchService.FindLeaseByMac(this.GrainFactory, macAddress, "192.168.0.");
+		// Get the IP range from settings
+		var ipRange = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_IP_RANGE);
+		
+		// Use the injected LeaseGrainSearchService to find a lease by MAC
+		var existingLease = await leaseGrainSearchService.FindLeaseByMac(this.GrainFactory, macAddress, ipRange);
 		
 		if (existingLease != null && !existingLease.IsExpired())
 		{
@@ -224,7 +225,9 @@ public class DhcpManagerGrain(
 					break;
 
 				case EOption.BroadcastAddressOption:
-					optionsBuilder.AddBroadcastAddressOption("192.168.0.255");//TODO: calculate based on router
+					var ipRange = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_IP_RANGE);
+					var subnet = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
+					optionsBuilder.AddBroadcastAddressOption(CalculateBroadcastAddress(ipRange, subnet));
 					break;
 
 				case EOption.NtpServers:
@@ -250,6 +253,30 @@ public class DhcpManagerGrain(
 	}
 	#endregion
 
+
+	// Helper method to calculate broadcast address based on IP range and subnet
+	private string CalculateBroadcastAddress(string ipRange, string subnet)
+	{
+		// Simple implementation - in production, this should properly handle CIDR and complex network calculations
+		if (string.IsNullOrEmpty(ipRange))
+			return "255.255.255.255"; // Default to global broadcast if no range is set
+			
+		// Remove the last octet and add broadcast
+		var parts = ipRange.Split('.');
+		// Ensure we don't have trailing dots in ipRange before adding the broadcast octet
+		if (parts.Length > 3)
+		{
+			return $"{parts[0]}.{parts[1]}.{parts[2]}.255";
+		}
+		else if (parts.Length == 3)
+		{
+			// The IP range already looks like "192.168.0." format
+			return $"{ipRange}255";
+		}
+		
+		// Fallback to safe default
+		return "255.255.255.255";
+	}
 
 
 }
