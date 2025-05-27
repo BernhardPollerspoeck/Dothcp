@@ -41,10 +41,3 @@ public class DhcpLease
 		Status = LeaseStatus.Expired;
 	}
 }
-
-public enum LeaseStatus
-{
-	Active,
-	Expired,
-	Renewed
-}

@@ -1,13 +1,18 @@
 using Orleans;
-using System.Net;
 
 namespace qt.qsp.dhcp.Server.Grains.DhcpManager;
 
-public static class LeaseGrainSearch
+public class LeaseGrainSearchService : ILeaseGrainSearchService
 {
-    // Simple implementation to find a lease by MAC address
-    // This searches through a predefined IP range
-    public static async Task<DhcpLease?> FindLeaseByMac(IGrainFactory grainFactory, string macAddress, string ipRange = "192.168.0.")
+    private readonly ILogger<LeaseGrainSearchService> _logger;
+    
+    public LeaseGrainSearchService(ILogger<LeaseGrainSearchService> logger)
+    {
+        _logger = logger;
+    }
+    
+    // Implementation to find a lease by MAC address
+    public async Task<DhcpLease?> FindLeaseByMac(IGrainFactory grainFactory, string macAddress, string ipRange)
     {
         var foundLeases = new List<DhcpLease>();
 

@@ -14,9 +14,11 @@ public class DhcpManagerGrain(
 	[PersistentState("clientInfo", "File")] IPersistentState<ClientInfo> state,
 	ILogger<DhcpManagerGrain> logger,
 	IOfferGeneratorService offerGeneratorService,
-	ISettingsLoaderService settingsLoader)
+	ISettingsLoaderService settingsLoader,
+	IServiceProvider serviceProvider)
 	: Grain, IDhcpManagerGrain
 {
+	private IServiceProvider ServiceProvider { get; } = serviceProvider;
 	#region IDhcpManagerGrain
 	public async Task<DhcpMessage?> HandleMessage(DhcpMessage message)
 	{
@@ -37,8 +39,9 @@ public class DhcpManagerGrain(
 		// Check if this client already has a lease by MAC address
 		var macAddress = BitConverter.ToString(message.ClientHardwareAdress).Replace("-", ":");
 		
-		// Use LeaseGrainSearch to find a lease by MAC
-		var existingLease = await LeaseGrainSearch.FindLeaseByMac(this.GrainFactory, macAddress);
+		// Use LeaseGrainSearchService to find a lease by MAC
+		var leaseSearchService = ServiceProvider.GetService<ILeaseGrainSearchService>();
+		var existingLease = await leaseSearchService.FindLeaseByMac(this.GrainFactory, macAddress, "192.168.0.");
 		
 		if (existingLease != null && !existingLease.IsExpired())
 		{
