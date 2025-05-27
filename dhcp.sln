@@ -5,6 +5,8 @@ VisualStudioVersion = 17.6.33815.320
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "qt.qsp.dhcp.Server", "src\qt.qsp.dhcp.Server\qt.qsp.dhcp.Server.csproj", "{652EF1FB-E636-47E5-A8ED-B1080D2B5E1C}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "qt.qsp.dhcp.Server.Tests", "tests\qt.qsp.dhcp.Server.Tests\qt.qsp.dhcp.Server.Tests.csproj", "{82AC7EF5-31C1-4C0B-BEE8-7BE297895A31}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -15,6 +17,10 @@ Global
 		{652EF1FB-E636-47E5-A8ED-B1080D2B5E1C}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{652EF1FB-E636-47E5-A8ED-B1080D2B5E1C}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{652EF1FB-E636-47E5-A8ED-B1080D2B5E1C}.Release|Any CPU.Build.0 = Release|Any CPU
+		{82AC7EF5-31C1-4C0B-BEE8-7BE297895A31}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{82AC7EF5-31C1-4C0B-BEE8-7BE297895A31}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{82AC7EF5-31C1-4C0B-BEE8-7BE297895A31}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{82AC7EF5-31C1-4C0B-BEE8-7BE297895A31}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

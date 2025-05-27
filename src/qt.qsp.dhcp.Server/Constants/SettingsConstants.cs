@@ -14,4 +14,5 @@ public static class SettingsConstants
 
 	public const string DHCP_LEASE_DNS = nameof(DHCP_LEASE_DNS);
 	public const string DHCP_LEASE_NTP_SERVERS = nameof(DHCP_LEASE_NTP_SERVERS);
+	public const string DHCP_IP_RANGE = nameof(DHCP_IP_RANGE);
 }
