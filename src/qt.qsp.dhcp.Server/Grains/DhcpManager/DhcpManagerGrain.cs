@@ -6,6 +6,7 @@ using qt.qsp.dhcp.Server.Models;
 using qt.qsp.dhcp.Server.Models.Enumerations;
 using qt.qsp.dhcp.Server.Models.OptionBuilder;
 using qt.qsp.dhcp.Server.Services;
+using qt.qsp.dhcp.Server.Utilities;
 using System.Net;
 
 namespace qt.qsp.dhcp.Server.Grains.DhcpManager;
@@ -227,7 +228,7 @@ public class DhcpManagerGrain(
 				case EOption.BroadcastAddressOption:
 					var ipRange = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_IP_RANGE);
 					var subnet = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
-					optionsBuilder.AddBroadcastAddressOption(CalculateBroadcastAddress(ipRange, subnet));
+					optionsBuilder.AddBroadcastAddressOption(NetworkUtilities.CalculateBroadcastAddress(ipRange, subnet));
 					break;
 
 				case EOption.NtpServers:
@@ -252,31 +253,6 @@ public class DhcpManagerGrain(
 		};
 	}
 	#endregion
-
-
-	// Helper method to calculate broadcast address based on IP range and subnet
-	private string CalculateBroadcastAddress(string ipRange, string subnet)
-	{
-		// Simple implementation - in production, this should properly handle CIDR and complex network calculations
-		if (string.IsNullOrEmpty(ipRange))
-			return "255.255.255.255"; // Default to global broadcast if no range is set
-			
-		// Remove the last octet and add broadcast
-		var parts = ipRange.Split('.');
-		// Ensure we don't have trailing dots in ipRange before adding the broadcast octet
-		if (parts.Length > 3)
-		{
-			return $"{parts[0]}.{parts[1]}.{parts[2]}.255";
-		}
-		else if (parts.Length == 3)
-		{
-			// The IP range already looks like "192.168.0." format
-			return $"{ipRange}255";
-		}
-		
-		// Fallback to safe default
-		return "255.255.255.255";
-	}
 
 
 }
