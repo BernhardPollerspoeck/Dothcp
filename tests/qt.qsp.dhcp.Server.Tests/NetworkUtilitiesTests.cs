@@ -16,7 +16,7 @@ public class NetworkUtilitiesTests
     [InlineData("192.168.1.1", "255.255.255.0", "192.168.1.255")]
     [InlineData("10.0.0.1", "255.0.0.0", "10.255.255.255")]
     [InlineData("172.16.1.1", "255.255.0.0", "172.16.255.255")]
-    [InlineData("192.168.1.15", "255.255.255.240", "192.168.1.31")]
+    [InlineData("192.168.1.15", "255.255.255.240", "192.168.1.15")]
     public void CalculateBroadcastAddress_ShouldReturnCorrectAddress(string ipAddress, string subnetMask, string expectedBroadcast)
     {
         // Act
