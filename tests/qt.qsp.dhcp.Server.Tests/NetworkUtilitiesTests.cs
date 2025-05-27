@@ -5,6 +5,13 @@ namespace qt.qsp.dhcp.Server.Tests;
 
 public class NetworkUtilitiesTests
 {
+    private readonly INetworkUtilityService _networkUtilityService;
+    
+    public NetworkUtilitiesTests()
+    {
+        _networkUtilityService = new NetworkUtilityService();
+    }
+    
     [Theory]
     [InlineData("192.168.1.1", "255.255.255.0", "192.168.1.255")]
     [InlineData("10.0.0.1", "255.0.0.0", "10.255.255.255")]
@@ -13,7 +20,7 @@ public class NetworkUtilitiesTests
     public void CalculateBroadcastAddress_ShouldReturnCorrectAddress(string ipAddress, string subnetMask, string expectedBroadcast)
     {
         // Act
-        var result = NetworkUtilities.CalculateBroadcastAddress(ipAddress, subnetMask);
+        var result = _networkUtilityService.CalculateBroadcastAddress(ipAddress, subnetMask);
         
         // Assert
         Assert.Equal(expectedBroadcast, result);
@@ -27,7 +34,7 @@ public class NetworkUtilitiesTests
     public void CalculateNetworkAddress_ShouldReturnCorrectAddress(string ipAddress, string subnetMask, string expectedNetwork)
     {
         // Act
-        var result = NetworkUtilities.CalculateNetworkAddress(ipAddress, subnetMask);
+        var result = _networkUtilityService.CalculateNetworkAddress(ipAddress, subnetMask);
         
         // Assert
         Assert.Equal(expectedNetwork, result);

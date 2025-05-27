@@ -16,7 +16,8 @@ public class DhcpManagerGrain(
 	ILogger<DhcpManagerGrain> logger,
 	IOfferGeneratorService offerGeneratorService,
 	ISettingsLoaderService settingsLoader,
-	ILeaseGrainSearchService leaseGrainSearchService)
+	ILeaseGrainSearchService leaseGrainSearchService,
+	INetworkUtilityService networkUtilityService)
 	: Grain, IDhcpManagerGrain
 {
 	#region IDhcpManagerGrain
@@ -228,7 +229,7 @@ public class DhcpManagerGrain(
 				case EOption.BroadcastAddressOption:
 					var ipRange = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_IP_RANGE);
 					var subnet = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
-					optionsBuilder.AddBroadcastAddressOption(NetworkUtilities.CalculateBroadcastAddress(ipRange, subnet));
+					optionsBuilder.AddBroadcastAddressOption(networkUtilityService.CalculateBroadcastAddress(ipRange, subnet));
 					break;
 
 				case EOption.NtpServers:

@@ -6,6 +6,7 @@ using qt.qsp.dhcp.Server.FileStorage.Iterator;
 using NLog.Web;
 using qt.qsp.dhcp.Server.Services;
 using qt.qsp.dhcp.Server.Grains.DhcpManager;
+using qt.qsp.dhcp.Server.Utilities;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -34,6 +35,7 @@ builder.Host.UseOrleans(static siloBuilder =>
 builder.Services.AddTransient<ISettingsLoaderService, SettingsLoaderService>();
 builder.Services.AddTransient<IOfferGeneratorService, OfferGeneratorService>();
 builder.Services.AddTransient<ILeaseGrainSearchService, LeaseGrainSearchService>();
+builder.Services.AddTransient<INetworkUtilityService, NetworkUtilityService>();
 
 builder.Services.AddHostedService<NetworkListener>();
 

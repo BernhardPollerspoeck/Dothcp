@@ -1,8 +1,8 @@
-﻿using System.Net;
+using System.Net;
 
 namespace qt.qsp.dhcp.Server.Utilities;
 
-public static class NetworkUtilities
+public class NetworkUtilityService : INetworkUtilityService
 {
     /// <summary>
     /// Calculates the broadcast address for a network by applying the subnet mask to the IP address range
@@ -10,7 +10,7 @@ public static class NetworkUtilities
     /// <param name="ipRange">An IP address within the network range (can be any address in the subnet)</param>
     /// <param name="subnetMask">The subnet mask for the network</param>
     /// <returns>The broadcast address for the network</returns>
-    public static string CalculateBroadcastAddress(string ipRange, string subnetMask)
+    public string CalculateBroadcastAddress(string ipRange, string subnetMask)
     {
         if (string.IsNullOrEmpty(ipRange))
             throw new ArgumentNullException(nameof(ipRange), "IP range cannot be null or empty");
@@ -46,7 +46,7 @@ public static class NetworkUtilities
     /// <param name="ipRange">An IP address within the network range (can be any address in the subnet)</param>
     /// <param name="subnetMask">The subnet mask for the network</param>
     /// <returns>The network address for the subnet</returns>
-    public static string CalculateNetworkAddress(string ipRange, string subnetMask)
+    public string CalculateNetworkAddress(string ipRange, string subnetMask)
     {
         if (string.IsNullOrEmpty(ipRange))
             throw new ArgumentNullException(nameof(ipRange), "IP range cannot be null or empty");
