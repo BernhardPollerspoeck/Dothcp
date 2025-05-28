@@ -100,7 +100,7 @@ public class DhcpManagerGrain(
 	}
 
 	// Helper method to create NAK message
-	private async Task<DhcpMessage> CreateNakMessage(DhcpMessage requestMessage, string reason)
+	private DhcpMessage CreateNakMessage(DhcpMessage requestMessage, string reason)
 	{
 		// Log the NAK reason
 		logger.LogWarning("Sending DHCPNAK to client {clientId}: {reason}", this.GetPrimaryKeyString(), reason);
@@ -149,7 +149,7 @@ public class DhcpManagerGrain(
 		{
 			// Unable to determine which IP address the client wants
 			logger.LogWarning("DHCP Request from client {clientId} doesn't specify an IP address", this.GetPrimaryKeyString());
-			return await CreateNakMessage(message, "No IP address specified in request");
+			return CreateNakMessage(message, "No IP address specified in request");
 		}
 		
 		// Get network configuration from settings
@@ -162,14 +162,14 @@ public class DhcpManagerGrain(
 		// Check if the requested IP is in the correct subnet
 		if (!networkUtilityService.IsIpInRange(requestedIp, networkAddress, subnetMask))
 		{
-			return await CreateNakMessage(message, $"Requested IP {requestedIp} is not in the configured subnet");
+			return CreateNakMessage(message, $"Requested IP {requestedIp} is not in the configured subnet");
 		}
 		
 		// Check if the address is a reserved address (network or broadcast)
 		string broadcastAddress = networkUtilityService.CalculateBroadcastAddress(ipRange, subnetMask);
 		if (networkUtilityService.IsReservedIp(requestedIp, networkAddress, broadcastAddress))
 		{
-			return await CreateNakMessage(message, $"Requested IP {requestedIp} is a reserved address (network or broadcast)");
+			return CreateNakMessage(message, $"Requested IP {requestedIp} is a reserved address (network or broadcast)");
 		}
 		
 		// Check if the address is available or already offered to this client
@@ -180,21 +180,21 @@ public class DhcpManagerGrain(
 		{
 			// IP is available but wasn't offered to this client - shouldn't happen in normal flow
 			logger.LogWarning("Client {clientId} requested IP {requestedIp} which wasn't offered", this.GetPrimaryKeyString(), requestedIp);
-			return await CreateNakMessage(message, $"IP {requestedIp} was not offered to this client");
+			return CreateNakMessage(message, $"IP {requestedIp} was not offered to this client");
 		}
 		
 		if (ipStatus.Status == EIpAddressStatus.Claimed && ipStatus.ClientId != this.GetPrimaryKeyString())
 		{
 			// IP is already claimed by another client
 			logger.LogWarning("Client {clientId} requested IP {requestedIp} which is claimed by another client", this.GetPrimaryKeyString(), requestedIp);
-			return await CreateNakMessage(message, $"IP {requestedIp} is already leased to another client");
+			return CreateNakMessage(message, $"IP {requestedIp} is already leased to another client");
 		}
 		
 		if (ipStatus.Status == EIpAddressStatus.Offered && ipStatus.ClientId != this.GetPrimaryKeyString())
 		{
 			// IP was offered to another client
 			logger.LogWarning("Client {clientId} requested IP {requestedIp} which was offered to another client", this.GetPrimaryKeyString(), requestedIp);
-			return await CreateNakMessage(message, $"IP {requestedIp} was offered to another client");
+			return CreateNakMessage(message, $"IP {requestedIp} was offered to another client");
 		}
 		
 		// Update IP status to Claimed
