@@ -6,6 +6,8 @@ public enum EMessageType : byte
     Discover = 1,//client message to gather offers
     Offer = 2,//server message offer of a lease
     Request = 3,//client requests the ip of an offer
-
+    
     Ack = 4,//server confirms the request
+    Decline = 5,//client declines an offer
+    Nak = 6,//server refuses a request
 }
