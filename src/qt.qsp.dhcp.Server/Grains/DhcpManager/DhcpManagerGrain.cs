@@ -66,28 +66,16 @@ public class DhcpManagerGrain(
 			return offerFromPreviousIp.Item2;
 		}
 
-
 		//give the client a requested if available
 		if (message.HasOption(EOption.AdressRequest))
 		{
-			var requestedAddress = message.GetRequestedAddress();
-			
-			// Check if the requested IP is already leased to someone else
-			var leaseGrain = this.GrainFactory.GetGrain<IDhcpLeaseGrain>(requestedAddress);
-			var lease = await leaseGrain.GetLease();
-			var isExpired = await leaseGrain.IsExpired();
-			
-			if (lease == null || isExpired || lease.MacAddress == macAddress)
+			// Use the new method for handling client-requested IPs
+			var offerFromRequestedIp = await offerGeneratorService.TryCreateOfferFromRequestedIp(message, state, this.GetPrimaryKeyString());
+			if (offerFromRequestedIp is { Item1: true, Item2: not null })
 			{
-				// IP is available or already belongs to this client
-				var offerMessage = await CreateOfferMessage(message, requestedAddress);
-				if (offerMessage != null)
-				{
-					return offerMessage;
-				}
+				return offerFromRequestedIp.Item2;
 			}
 		}
-
 
 		//get offer by server choosen ip
 		var randomIpOffer = await offerGeneratorService.TryCreateOfferFromRandomIp(message, state, this.GetPrimaryKeyString());

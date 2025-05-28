@@ -9,6 +9,12 @@ public interface IOfferGeneratorService
 		DhcpMessage message,
 		IPersistentState<ClientInfo> clientInfo,
 		string clientId);
+		
+	Task<(bool, DhcpMessage?)> TryCreateOfferFromRequestedIp(
+		DhcpMessage message,
+		IPersistentState<ClientInfo> clientInfo,
+		string clientId);
+		
 	Task<(bool, DhcpMessage?)> TryCreateOfferFromRandomIp(
 		DhcpMessage message,
 		IPersistentState<ClientInfo> clientInfo,
