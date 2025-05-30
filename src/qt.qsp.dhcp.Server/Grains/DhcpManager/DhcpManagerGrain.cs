@@ -16,7 +16,6 @@ public class DhcpManagerGrain(
 	ILogger<DhcpManagerGrain> logger,
 	IOfferGeneratorService offerGeneratorService,
 	ISettingsLoaderService settingsLoader,
-	ILeaseGrainSearchService leaseGrainSearchService,
 	INetworkUtilityService networkUtilityService)
 	: Grain, IDhcpManagerGrain
 {
@@ -40,28 +39,6 @@ public class DhcpManagerGrain(
 	#region message handling
 	public async Task<DhcpMessage?> HandleDiscover(DhcpMessage message)
 	{
-		// Check if this client already has a lease by MAC address
-		var macAddress = BitConverter.ToString(message.ClientHardwareAdress).Replace("-", ":");
-		
-		// Get the IP range from settings
-		var ipRange = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_IP_RANGE);
-		
-		// Use the injected LeaseGrainSearchService to find a lease by MAC
-		var existingLease = await leaseGrainSearchService.FindLeaseByMac(GrainFactory, macAddress, ipRange);
-		
-		if (existingLease != null && !existingLease.IsExpired())
-		{
-			logger.LogInformation("Found existing lease for client with MAC {macAddress} at IP {ipAddress}", 
-				macAddress, existingLease.IpAddress);
-				
-			// Create an offer for the previously leased IP
-			var offerMessage = await CreateOfferMessage(message, existingLease.IpAddress.ToString());
-			if (offerMessage != null)
-			{
-				return offerMessage;
-			}
-		}
-		
 		//get previously assigned ip
 		var offerFromPreviousIp = await offerGeneratorService.TryCreateOfferFromPreviousIp(message, state, this.GetPrimaryKeyString());
 		if (offerFromPreviousIp is { Item1: true, Item2: not null })
@@ -92,15 +69,7 @@ public class DhcpManagerGrain(
 		return null;
 	}
 	
-	// Helper method to create offer message
-	private Task<DhcpMessage?> CreateOfferMessage(DhcpMessage requestMessage, string ipAddress)
-	{
-		// This is a simplified placeholder - in reality, you would use logic similar to 
-		// what's in offerGeneratorService to create a proper offer message
-		// Example implementation would include checking IP availability, creating options, etc.
-		// For now, we'll return null to indicate the caller should fall back to the existing implementation
-		return Task.FromResult<DhcpMessage?>(null);
-	}
+
 
 	// Helper method to create NAK message
 	private DhcpMessage CreateNakMessage(DhcpMessage requestMessage, string reason)
