@@ -35,6 +35,7 @@ public class NetworkInterfaceInfo
 {
     public string Name { get; set; } = string.Empty;
     public string IpAddress { get; set; } = string.Empty;
+    public string SubnetMask { get; set; } = string.Empty;
     public OperationalStatus Status { get; set; }
     public string Description { get; set; } = string.Empty;
 }

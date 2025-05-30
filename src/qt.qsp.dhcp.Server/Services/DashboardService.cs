@@ -71,14 +71,17 @@ public class DashboardService : IDashboardService
                 try
                 {
                     var ipProps = ni.GetIPProperties();
-                    var ipAddress = ipProps.UnicastAddresses
-                        .FirstOrDefault(addr => addr.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
-                        ?.Address?.ToString() ?? "No IP";
+                    var unicastAddress = ipProps.UnicastAddresses
+                        .FirstOrDefault(addr => addr.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork);
+                    
+                    var ipAddress = unicastAddress?.Address?.ToString() ?? "No IP";
+                    var subnetMask = unicastAddress?.IPv4Mask?.ToString() ?? "Unknown";
 
                     interfaces.Add(new NetworkInterfaceInfo
                     {
                         Name = ni.Name,
                         IpAddress = ipAddress,
+                        SubnetMask = subnetMask,
                         Status = ni.OperationalStatus,
                         Description = ni.Description
                     });
@@ -92,6 +95,7 @@ public class DashboardService : IDashboardService
                     {
                         Name = ni.Name,
                         IpAddress = "Unknown",
+                        SubnetMask = "Unknown",
                         Status = OperationalStatus.Unknown,
                         Description = ni.Description
                     });

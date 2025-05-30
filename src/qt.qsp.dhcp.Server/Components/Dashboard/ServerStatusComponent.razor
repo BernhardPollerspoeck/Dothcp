@@ -6,48 +6,70 @@
         <h5 class="card-title mb-0">Server Status</h5>
     </div>
     <div class="card-body">
-        <div class="row">
-            <div class="col-md-6">
-                <div class="mb-3">
-                    <strong>Uptime:</strong> @FormatUptime(ServerStatus.Uptime)
-                </div>
-                <div class="mb-3">
-                    <strong>Status:</strong> 
-                    <span class="badge @GetStatusBadgeClass(ServerStatus.State)">
-                        @ServerStatus.State
-                    </span>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="mb-3">
-                    <strong>Network Interfaces:</strong>
-                    <ul class="list-unstyled mt-2">
-                        @foreach (var nic in ServerStatus.NetworkInterfaces.Take(3))
-                        {
-                            <li class="mb-1">
-                                <span class="badge @GetNicStatusBadgeClass(nic.Status) me-2">@nic.Status</span>
-                                @nic.Name: @nic.IpAddress
-                            </li>
-                        }
-                    </ul>
-                </div>
-            </div>
-        </div>
-        <div class="row mt-3">
+        <div class="row mb-3">
             <div class="col-12">
-                <div class="btn-group" role="group">
-                    <button class="btn btn-success btn-sm" @onclick="StartService" disabled="@(ServerStatus.State == ServerState.Running)">
-                        Start
-                    </button>
-                    <button class="btn btn-warning btn-sm" @onclick="StopService" disabled="@(ServerStatus.State == ServerState.Stopped)">
-                        Stop
-                    </button>
-                    <button class="btn btn-info btn-sm" @onclick="RestartService">
-                        Restart
-                    </button>
+                <div class="d-flex flex-wrap align-items-center gap-4">
+                    <div>
+                        <strong>Uptime:</strong> @FormatUptime(ServerStatus.Uptime)
+                    </div>
+                    <div>
+                        <strong>Status:</strong> 
+                        <span class="badge @GetStatusBadgeClass(ServerStatus.State)">
+                            @ServerStatus.State
+                        </span>
+                    </div>
+                    <div class="ms-auto">
+                        <div class="btn-group" role="group">
+                            <button class="btn btn-success btn-sm" @onclick="StartService" disabled="@(ServerStatus.State == ServerState.Running)">
+                                Start
+                            </button>
+                            <button class="btn btn-warning btn-sm" @onclick="StopService" disabled="@(ServerStatus.State == ServerState.Stopped)">
+                                Stop
+                            </button>
+                            <button class="btn btn-info btn-sm" @onclick="RestartService">
+                                Restart
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
+        
+        @if (ServerStatus.NetworkInterfaces.Any())
+        {
+            <div class="row">
+                <div class="col-12">
+                    <h6 class="mb-3">Network Interfaces</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover">
+                            <thead>
+                                <tr>
+                                    <th>Status</th>
+                                    <th>Interface</th>
+                                    <th>IP Address</th>
+                                    <th>Subnet Mask</th>
+                                    <th>Description</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var nic in ServerStatus.NetworkInterfaces)
+                                {
+                                    <tr>
+                                        <td>
+                                            <span class="badge @GetNicStatusBadgeClass(nic.Status)">@nic.Status</span>
+                                        </td>
+                                        <td>@nic.Name</td>
+                                        <td>@nic.IpAddress</td>
+                                        <td>@nic.SubnetMask</td>
+                                        <td><small class="text-muted">@nic.Description</small></td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+        }
     </div>
 </div>
 
