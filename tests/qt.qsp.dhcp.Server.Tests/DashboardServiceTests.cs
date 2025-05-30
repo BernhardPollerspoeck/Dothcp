@@ -18,6 +18,7 @@ public class DashboardServiceTests
         var mockLeaseSearchService = new Mock<ILeaseGrainSearchService>();
         var mockSettingsLoader = new Mock<ISettingsLoaderService>();
         var mockNetworkUtility = new Mock<INetworkUtilityService>();
+        var mockDhcpServerService = new Mock<IDhcpServerService>();
         var logger = NullLogger<DashboardService>.Instance;
 
         // Setup default values for settings
@@ -45,12 +46,16 @@ public class DashboardServiceTests
         mockGrainFactory.Setup(x => x.GetGrain<IDhcpLeaseGrain>(It.IsAny<string>(), It.IsAny<string>()))
             .Returns(mockLeaseGrain.Object);
 
+        // Setup DHCP server service mock
+        mockDhcpServerService.Setup(x => x.CurrentState).Returns(ServerState.Running);
+
         return new DashboardService(
             mockGrainFactory.Object,
             mockLeaseSearchService.Object,
             logger,
             mockSettingsLoader.Object,
-            mockNetworkUtility.Object);
+            mockNetworkUtility.Object,
+            mockDhcpServerService.Object);
     }
 
     [Fact]

@@ -9,6 +9,7 @@
 @inject IClusterClient ClusterClient
 @inject ISettingsService SettingsService
 @inject INetworkUtilityService NetworkUtilityService
+@inject IDhcpServerService DhcpServerService
 @inject NavigationManager Navigation
 
 <h3>🚀 Welcome to DHCP Server</h3>
@@ -388,13 +389,25 @@ else if (setupSettings != null)
 				await SettingsService.SetSettingAsync(key, value);
 			}
 
-			loadingMessage = "Setup completed! Redirecting...";
+			loadingMessage = "Setup completed! Starting DHCP server...";
+			StateHasChanged();
+			
+			// Start the DHCP server
+			var startResult = await DhcpServerService.StartAsync();
+			if (!startResult)
+			{
+				errorMessage = "Settings saved successfully, but failed to start DHCP server. You can start it manually from the dashboard.";
+				showErrorMessage = true;
+				return;
+			}
+			
+			loadingMessage = "DHCP server started! Redirecting to dashboard...";
 			StateHasChanged();
 			
 			await Task.Delay(1000); // Brief pause to show completion
 			
-			// Navigate to settings page after successful setup
-			Navigation.NavigateTo("/settings");
+			// Navigate to dashboard after successful setup and start
+			Navigation.NavigateTo("/");
 		}
 		catch (Exception ex)
 		{
