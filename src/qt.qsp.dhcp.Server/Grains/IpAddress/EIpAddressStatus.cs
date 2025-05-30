@@ -6,4 +6,5 @@ public enum EIpAddressStatus
     Offered,
     Claimed,
     Reserved,
+    Declined,
 }

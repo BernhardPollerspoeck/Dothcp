@@ -29,6 +29,9 @@ public class DhcpManagerGrain(
 		{
 			EMessageType.Discover => await HandleDiscover(message),
 			EMessageType.Request => await HandleRequest(message),
+			EMessageType.Decline => await HandleDecline(message),
+			EMessageType.Release => await HandleRelease(message),
+			EMessageType.Inform => await HandleInform(message),
 			_ => null,
 		};
 	}
@@ -90,13 +93,13 @@ public class DhcpManagerGrain(
 	}
 	
 	// Helper method to create offer message
-	private async Task<DhcpMessage?> CreateOfferMessage(DhcpMessage requestMessage, string ipAddress)
+	private Task<DhcpMessage?> CreateOfferMessage(DhcpMessage requestMessage, string ipAddress)
 	{
 		// This is a simplified placeholder - in reality, you would use logic similar to 
 		// what's in offerGeneratorService to create a proper offer message
 		// Example implementation would include checking IP availability, creating options, etc.
 		// For now, we'll return null to indicate the caller should fall back to the existing implementation
-		return null;
+		return Task.FromResult<DhcpMessage?>(null);
 	}
 
 	// Helper method to create NAK message
@@ -128,6 +131,177 @@ public class DhcpManagerGrain(
 			ClientHardwareAdress = requestMessage.ClientHardwareAdress,
 			Options = optionsBuilder.Build()
 		};
+	}
+
+	public async Task<DhcpMessage?> HandleInform(DhcpMessage message)
+	{
+		logger.LogInformation("Processing DHCP Inform from client {clientId}", this.GetPrimaryKeyString());
+		
+		// For INFORM messages, clients already have an IP address and just want configuration
+		// information, so we don't need to check or assign an IP address
+		
+		// Get the local IP address for the server identifier
+		var localIp = OfferGeneratorService.GetLocalIpAddress();
+		
+		// Create ACK response with configuration options
+		var optionsBuilder = new DhcpOptionsBuilder()
+			.AddMessageType(EMessageType.Ack)
+			.AddServerIdentifier(localIp)
+			.AddTimeOffset(DateTime.Now - DateTime.UtcNow);
+		
+		// Get network configuration from settings
+		var ipRange = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_IP_RANGE);
+		var subnetMask = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
+		var broadcastAddress = networkUtilityService.CalculateBroadcastAddress(ipRange, subnetMask);
+		
+		// Add requested parameters
+		var parameters = message.GetParameterList();
+		foreach (var item in parameters.Cast<EOption>())
+		{
+			switch (item)
+			{
+				case EOption.SubnetMask:
+					optionsBuilder.AddSubnetMask(await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET));
+					break;
+
+				case EOption.RouterOptions:
+					optionsBuilder.AddRouterOption(await settingsLoader.GetSetting<string[]>(SettingsConstants.DHCP_LEASE_ROUTER));
+					break;
+
+				case EOption.DnsServerOptions:
+					optionsBuilder.AddDnsServerOptions(await settingsLoader.GetSetting<string[]>(SettingsConstants.DHCP_LEASE_DNS));
+					break;
+
+				case EOption.HostName:
+					//TODO: maybe later optionsBuilder.AddHostName("Affe mit Waffe");
+					break;
+
+				case EOption.DomainName:
+					//TODO: later with dns optionsBuilder.AddDomainName("HomeDomain");
+					break;
+
+				case EOption.BroadcastAddressOption:
+					optionsBuilder.AddBroadcastAddressOption(broadcastAddress);
+					break;
+
+				case EOption.NtpServers:
+					optionsBuilder.AddNtpServerOptions(await settingsLoader.GetSetting<string[]>(SettingsConstants.DHCP_LEASE_NTP_SERVERS));
+					break;
+			}
+		}
+		
+		// For INFORM messages, don't include lease time or renewal/rebinding times
+		
+		logger.LogInformation("Sent configuration information to client {clientId} in response to INFORM", this.GetPrimaryKeyString());
+		
+		// Create the response message
+		return new DhcpMessage
+		{
+			Direction = EMessageDirection.Reply,
+			HardwareType = message.HardwareType,
+			ClientIdLength = message.ClientIdLength,
+			Hops = 0,
+			TransactionId = message.TransactionId,
+			ResponseCastType = message.ResponseCastType,
+			ClientIpAdress = message.ClientIpAdress, // Keep the client's IP
+			AssigneeAdress = 0, // Don't assign an IP for INFORM
+			ServerIpAdress = BitConverter.ToUInt32(localIp.GetAddressBytes()),
+			ClientHardwareAdress = message.ClientHardwareAdress,
+			Options = optionsBuilder.Build()
+		};
+	}
+
+	public async Task<DhcpMessage?> HandleRelease(DhcpMessage message)
+	{
+		logger.LogInformation("Processing DHCP Release from client {clientId}", this.GetPrimaryKeyString());
+		
+		// Get the released IP address from the message
+		string releasedIp;
+		if (message.ClientIpAdress != 0) // Client should use ciaddr field for RELEASE
+		{
+			var bytes = BitConverter.GetBytes(message.ClientIpAdress);
+			releasedIp = $"{bytes[0]}.{bytes[1]}.{bytes[2]}.{bytes[3]}";
+		}
+		else if (message.HasOption(EOption.AdressRequest))
+		{
+			releasedIp = message.GetRequestedAddress();
+		}
+		else
+		{
+			// Unable to determine which IP address the client is releasing
+			logger.LogWarning("DHCP Release from client {clientId} doesn't specify an IP address", this.GetPrimaryKeyString());
+			return null; // No response needed for invalid RELEASE
+		}
+		
+		// Check if this client actually has this IP assigned
+		var ipAddressGrain = GrainFactory.GetGrain<IIpAddressInformationGrain>(releasedIp);
+		var ipStatus = await ipAddressGrain.GetStatus();
+		
+		if (ipStatus.Status == EIpAddressStatus.Claimed && ipStatus.ClientId == this.GetPrimaryKeyString())
+		{
+			// Mark the IP as available in the IP address manager
+			await ipAddressGrain.SetStatus(EIpAddressStatus.Available, null);
+			
+			// Revoke the lease
+			var leaseGrain = GrainFactory.GetGrain<IDhcpLeaseGrain>(releasedIp);
+			await leaseGrain.RevokeLease();
+			
+			// Update client state to indicate no assignment
+			state.State.HasAssignedAddress = false;
+			state.State.Address = null;
+			state.State.State = EClientState.Released;
+			await state.WriteStateAsync();
+			
+			logger.LogInformation("Client {clientId} released IP address {releasedIp}", this.GetPrimaryKeyString(), releasedIp);
+		}
+		else
+		{
+			// IP is not claimed by this client
+			logger.LogWarning("Client {clientId} attempted to release IP {releasedIp} which is not assigned to them", 
+				this.GetPrimaryKeyString(), releasedIp);
+		}
+		
+		// No response is needed for RELEASE messages
+		return null;
+	}
+
+	public async Task<DhcpMessage?> HandleDecline(DhcpMessage message)
+	{
+		logger.LogWarning("Processing DHCP Decline from client {clientId}", this.GetPrimaryKeyString());
+		
+		// Get the declined IP address from the message
+		string declinedIp;
+		if (message.HasOption(EOption.AdressRequest))
+		{
+			declinedIp = message.GetRequestedAddress();
+		}
+		else if (message.ClientIpAdress != 0) // Client is using ciaddr field
+		{
+			var bytes = BitConverter.GetBytes(message.ClientIpAdress);
+			declinedIp = $"{bytes[0]}.{bytes[1]}.{bytes[2]}.{bytes[3]}";
+		}
+		else
+		{
+			// Unable to determine which IP address the client is declining
+			logger.LogWarning("DHCP Decline from client {clientId} doesn't specify an IP address", this.GetPrimaryKeyString());
+			return null; // No response needed for invalid DECLINE
+		}
+		
+		// Mark the IP as declined in the IP address manager
+		var ipAddressGrain = GrainFactory.GetGrain<IIpAddressInformationGrain>(declinedIp);
+		await ipAddressGrain.SetStatus(EIpAddressStatus.Declined, this.GetPrimaryKeyString());
+		
+		// Log the decline event
+		logger.LogWarning("Client {clientId} declined IP address {declinedIp}", this.GetPrimaryKeyString(), declinedIp);
+		
+		// Update client state to indicate no assignment
+		state.State.HasAssignedAddress = false;
+		state.State.Address = null;
+		state.State.State = EClientState.Declined;
+		await state.WriteStateAsync();
+		
+		// No response is needed for DECLINE messages
+		return null;
 	}
 
 	public async Task<DhcpMessage?> HandleRequest(DhcpMessage message)

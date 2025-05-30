@@ -12,4 +12,6 @@ public enum EClientState
 	Unknown,
 	Offered,
 	Assigned,
+	Declined,
+	Released,
 }
