@@ -6,11 +6,11 @@ public class EditableSettings
 {
 	[Display(Name = "Range Low")]
 	[Range(1, 254, ErrorMessage = "Range Low must be between 1 and 254")]
-	public byte RangeLow { get; set; }
+	public int RangeLow { get; set; }
 
 	[Display(Name = "Range High")]
 	[Range(1, 254, ErrorMessage = "Range High must be between 1 and 254")]
-	public byte RangeHigh { get; set; }
+	public int RangeHigh { get; set; }
 
 	[Display(Name = "Lease Time (HH:MM:SS)")]
 	[Required(ErrorMessage = "Lease Time is required")]
