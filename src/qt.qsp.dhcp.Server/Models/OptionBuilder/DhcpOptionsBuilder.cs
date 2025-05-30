@@ -221,18 +221,14 @@ public class DhcpOptionsBuilder
 			return this;
 		}
 
-		// Simplified DNS name encoding - each domain is encoded as a series of length-prefixed labels
+		// RFC 3397 and RFC 1035 compliant DNS search list encoding
+		// with domain name compression support
 		var data = new List<byte>();
+		var nameOffsets = new Dictionary<string, int>();
 		
 		foreach (var domain in searchDomains)
 		{
-			var labels = domain.Split('.');
-			foreach (var label in labels)
-			{
-				data.Add((byte)label.Length);
-				data.AddRange(Encoding.ASCII.GetBytes(label));
-			}
-			data.Add(0); // Null terminator for the domain
+			EncodeDnsName(domain, data, nameOffsets);
 		}
 		
 		_options.Add(new()
@@ -241,6 +237,58 @@ public class DhcpOptionsBuilder
 			Data = data.ToArray(),
 		});
 		return this;
+	}
+	
+	private void EncodeDnsName(string domain, List<byte> data, Dictionary<string, int> nameOffsets)
+	{
+		if (string.IsNullOrEmpty(domain))
+		{
+			data.Add(0); // Empty domain is just a zero byte
+			return;
+		}
+		
+		string remainingDomain = domain;
+		while (!string.IsNullOrEmpty(remainingDomain))
+		{
+			// Check if this domain (or suffix) has been seen before for compression
+			if (nameOffsets.TryGetValue(remainingDomain, out int offset))
+			{
+				// Use compression pointer (top 2 bits set, followed by 14-bit offset)
+				int pointer = 0xC000 | offset;
+				data.Add((byte)((pointer >> 8) & 0xFF)); // High byte
+				data.Add((byte)(pointer & 0xFF));        // Low byte
+				return; // We're done once we add a pointer
+			}
+			
+			// Store the position of this domain for future compression
+			nameOffsets[remainingDomain] = data.Count;
+			
+			// Find the position of the first dot
+			int dotPos = remainingDomain.IndexOf('.');
+			
+			// Extract the next label
+			string label;
+			if (dotPos == -1)
+			{
+				label = remainingDomain;
+				remainingDomain = string.Empty;
+			}
+			else
+			{
+				label = remainingDomain.Substring(0, dotPos);
+				remainingDomain = remainingDomain.Substring(dotPos + 1);
+			}
+			
+			// Encode the label length and data
+			if (label.Length > 0 && label.Length <= 63) // Max label length is 63 per RFC 1035
+			{
+				data.Add((byte)label.Length);
+				data.AddRange(Encoding.ASCII.GetBytes(label));
+			}
+		}
+		
+		// Add the terminating zero if we didn't use a compression pointer
+		data.Add(0);
 	}
 
 	public DhcpOptionsBuilder AddClasslessStaticRoutes(Dictionary<(byte prefixLength, byte[] networkPrefix), IPAddress> routes)

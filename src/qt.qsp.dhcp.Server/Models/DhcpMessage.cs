@@ -244,33 +244,20 @@ public class DhcpMessage
 
 		try
 		{
-			// Simplified approach to parse DNS search list
 			var result = new List<string>();
 			int position = 0;
 			
+			// Parse all domain names in the search list
 			while (position < option.Data.Length)
 			{
-				var domainParts = new List<string>();
-				
-				while (position < option.Data.Length && option.Data[position] != 0)
+				string domain = ParseDnsName(option.Data, ref position);
+				if (!string.IsNullOrEmpty(domain))
 				{
-					int labelLength = option.Data[position++];
-					
-					if (position + labelLength <= option.Data.Length)
-					{
-						var labelBytes = new byte[labelLength];
-						Array.Copy(option.Data, position, labelBytes, 0, labelLength);
-						domainParts.Add(Encoding.ASCII.GetString(labelBytes));
-						position += labelLength;
-					}
+					result.Add(domain);
 				}
 				
-				if (domainParts.Count > 0)
-				{
-					result.Add(string.Join(".", domainParts));
-				}
-				
-				// Skip the terminating zero
+				// If we're at a zero byte and not at the end yet, skip it as it may be
+				// the start of the next domain name
 				if (position < option.Data.Length && option.Data[position] == 0)
 				{
 					position++;
@@ -283,6 +270,78 @@ public class DhcpMessage
 		{
 			return null;
 		}
+	}
+	
+	private string ParseDnsName(byte[] data, ref int position)
+	{
+		if (position >= data.Length)
+		{
+			return string.Empty;
+		}
+		
+		var domainParts = new List<string>();
+		bool doneReading = false;
+		int maxJumps = 128; // Prevent infinite loops due to malformed data
+		
+		// Keep track of where we were in case we need to jump for compression
+		int savedPosition = -1;
+		
+		while (!doneReading && maxJumps-- > 0)
+		{
+			if (position >= data.Length)
+			{
+				break;
+			}
+			
+			byte b = data[position++];
+			
+			// Check if this is a pointer (compression)
+			if ((b & 0xC0) == 0xC0)
+			{
+				// This is a compression pointer (high 2 bits set)
+				if (position >= data.Length)
+				{
+					break; // Malformed - not enough data for pointer
+				}
+				
+				// Save current position if this is our first jump
+				if (savedPosition == -1)
+				{
+					savedPosition = position + 1; // +1 to skip the second byte of the pointer
+				}
+				
+				// Calculate offset from 14 bits (the 2 MSB bits are the marker)
+				int offset = ((b & 0x3F) << 8) | data[position++];
+				position = offset; // Jump to the offset
+			}
+			else if (b == 0)
+			{
+				// End of domain name
+				doneReading = true;
+			}
+			else
+			{
+				// Regular label
+				int labelLength = b;
+				if (position + labelLength > data.Length)
+				{
+					break; // Malformed - not enough data for label
+				}
+				
+				var labelBytes = new byte[labelLength];
+				Array.Copy(data, position, labelBytes, 0, labelLength);
+				domainParts.Add(Encoding.ASCII.GetString(labelBytes));
+				position += labelLength;
+			}
+		}
+		
+		// If we followed compression pointers, restore the position
+		if (savedPosition != -1)
+		{
+			position = savedPosition;
+		}
+		
+		return string.Join(".", domainParts);
 	}
 
 	public IEnumerable<byte> ToData()
