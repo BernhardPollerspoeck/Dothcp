@@ -54,11 +54,17 @@
                             <tbody>
                                 @foreach (var nic in ServerStatus.NetworkInterfaces)
                                 {
-                                    <tr>
+                                    <tr class="@(nic.IsActiveDhcpInterface ? "table-info" : "")">
                                         <td>
                                             <span class="badge @GetNicStatusBadgeClass(nic.Status)">@nic.Status</span>
                                         </td>
-                                        <td>@nic.Name</td>
+                                        <td>
+                                            @nic.Name
+                                            @if (nic.IsActiveDhcpInterface)
+                                            {
+                                                <span class="badge bg-primary ms-2">DHCP Active</span>
+                                            }
+                                        </td>
                                         <td>@nic.IpAddress</td>
                                         <td>@nic.SubnetMask</td>
                                         <td><small class="text-muted">@nic.Description</small></td>

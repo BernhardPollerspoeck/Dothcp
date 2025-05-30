@@ -1,8 +1,16 @@
 @using qt.qsp.dhcp.Server.Grains.DhcpManager
+@using qt.qsp.dhcp.Server.Services
 
 <div class="card">
     <div class="card-header d-flex justify-content-between align-items-center">
-        <h5 class="card-title mb-0">Active Leases (@RecentLeases.Count)</h5>
+        <h5 class="card-title mb-0">
+            Active Leases
+            @if (!string.IsNullOrEmpty(DhcpNetwork?.NetworkCidr))
+            {
+                <small class="text-muted">on @DhcpNetwork.NetworkCidr</small>
+            }
+            (@RecentLeases.Count)
+        </h5>
         <button class="btn btn-sm btn-outline-primary" @onclick="RefreshLeases">
             <i class="bi bi-arrow-clockwise"></i> Refresh
         </button>
@@ -90,6 +98,7 @@
 
 @code {
     [Parameter] public List<DhcpLease> RecentLeases { get; set; } = [];
+    [Parameter] public DhcpNetworkInfo? DhcpNetwork { get; set; }
     [Parameter] public EventCallback OnRefresh { get; set; }
 
     private string GetStatusBadgeClass(LeaseStatus status)

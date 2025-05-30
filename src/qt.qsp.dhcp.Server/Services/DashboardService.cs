@@ -4,6 +4,7 @@ using System.Net.NetworkInformation;
 using System.Diagnostics;
 using qt.qsp.dhcp.Server.Constants;
 using qt.qsp.dhcp.Server.Utilities;
+using System.Net;
 
 namespace qt.qsp.dhcp.Server.Services;
 
@@ -34,9 +35,13 @@ public class DashboardService : IDashboardService
     {
         try
         {
+            // Get DHCP network configuration first
+            var dhcpNetwork = await GetDhcpNetworkInfoAsync();
+            
             var dashboardData = new DashboardData
             {
-                ServerStatus = await GetServerStatusAsync(),
+                DhcpNetwork = dhcpNetwork,
+                ServerStatus = await GetServerStatusAsync(dhcpNetwork),
                 LeaseStatistics = await GetLeaseStatisticsAsync(),
                 RecentLeases = await GetRecentLeasesAsync()
             };
@@ -50,10 +55,51 @@ public class DashboardService : IDashboardService
         }
     }
 
-    private Task<ServerStatus> GetServerStatusAsync()
+    private async Task<DhcpNetworkInfo> GetDhcpNetworkInfoAsync()
+    {
+        try
+        {
+            var routerBytes = await _settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER);
+            var subnetMask = await _settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
+            
+            var routerAddress = string.Join('.', routerBytes);
+            var networkAddress = _networkUtility.CalculateNetworkAddress(routerAddress, subnetMask);
+            var cidrNotation = GetCidrNotation(subnetMask);
+            
+            return new DhcpNetworkInfo
+            {
+                NetworkAddress = networkAddress,
+                SubnetMask = subnetMask,
+                RouterAddress = routerAddress,
+                NetworkCidr = $"{networkAddress}/{cidrNotation}"
+            };
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting DHCP network info");
+            return new DhcpNetworkInfo();
+        }
+    }
+
+    private int GetCidrNotation(string subnetMask)
+    {
+        try
+        {
+            var subnet = IPAddress.Parse(subnetMask);
+            var bytes = subnet.GetAddressBytes();
+            var binaryString = string.Concat(bytes.Select(b => Convert.ToString(b, 2).PadLeft(8, '0')));
+            return binaryString.Count(c => c == '1');
+        }
+        catch
+        {
+            return 24; // Default to /24 if we can't parse
+        }
+    }
+
+    private Task<ServerStatus> GetServerStatusAsync(DhcpNetworkInfo dhcpNetwork)
     {
         var uptime = DateTime.UtcNow - _serverStartTime;
-        var networkInterfaces = GetNetworkInterfaces();
+        var networkInterfaces = GetNetworkInterfaces(dhcpNetwork);
 
         var serverStatus = new ServerStatus
         {
@@ -65,7 +111,7 @@ public class DashboardService : IDashboardService
         return Task.FromResult(serverStatus);
     }
 
-    private List<NetworkInterfaceInfo> GetNetworkInterfaces()
+    private List<NetworkInterfaceInfo> GetNetworkInterfaces(DhcpNetworkInfo dhcpNetwork)
     {
         var interfaces = new List<NetworkInterfaceInfo>();
 
@@ -85,13 +131,17 @@ public class DashboardService : IDashboardService
                     var ipAddress = unicastAddress?.Address?.ToString() ?? "No IP";
                     var subnetMask = unicastAddress?.IPv4Mask?.ToString() ?? "Unknown";
 
+                    // Check if this interface is the active DHCP interface
+                    var isActiveDhcp = IsActiveDhcpInterface(ipAddress, subnetMask, dhcpNetwork);
+
                     interfaces.Add(new NetworkInterfaceInfo
                     {
                         Name = ni.Name,
                         IpAddress = ipAddress,
                         SubnetMask = subnetMask,
                         Status = ni.OperationalStatus,
-                        Description = ni.Description
+                        Description = ni.Description,
+                        IsActiveDhcpInterface = isActiveDhcp
                     });
                 }
                 catch (Exception ex)
@@ -105,7 +155,8 @@ public class DashboardService : IDashboardService
                         IpAddress = "Unknown",
                         SubnetMask = "Unknown",
                         Status = OperationalStatus.Unknown,
-                        Description = ni.Description
+                        Description = ni.Description,
+                        IsActiveDhcpInterface = false
                     });
                 }
             }
@@ -116,6 +167,26 @@ public class DashboardService : IDashboardService
         }
 
         return interfaces;
+    }
+
+    private bool IsActiveDhcpInterface(string interfaceIp, string interfaceSubnet, DhcpNetworkInfo dhcpNetwork)
+    {
+        try
+        {
+            if (interfaceIp == "No IP" || interfaceIp == "Unknown" || string.IsNullOrEmpty(dhcpNetwork.RouterAddress))
+                return false;
+
+            // Check if the interface IP is on the same network as the DHCP router
+            var interfaceNetwork = _networkUtility.CalculateNetworkAddress(interfaceIp, interfaceSubnet);
+            var dhcpNetworkAddr = _networkUtility.CalculateNetworkAddress(dhcpNetwork.RouterAddress, dhcpNetwork.SubnetMask);
+            
+            return string.Equals(interfaceNetwork, dhcpNetworkAddr, StringComparison.OrdinalIgnoreCase);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogDebug(ex, "Error determining if interface {InterfaceIp} is active DHCP interface", interfaceIp);
+            return false;
+        }
     }
 
     private async Task<LeaseStatistics> GetLeaseStatisticsAsync()
