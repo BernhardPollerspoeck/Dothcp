@@ -91,10 +91,6 @@ public class SettingsServiceTests
 	}
 
 	[Theory]
-	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET, "192.168.1.0", true)]
-	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET, "10.0.0.0", true)]
-	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET, "192.168.1.256", false)]
-	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET, "invalid-ip", false)]
 	[InlineData(SettingsConstants.DHCP_LEASE_ROUTER, "192.168.1.1", true)]
 	[InlineData(SettingsConstants.DHCP_LEASE_ROUTER, "invalid-ip", false)]
 	public async Task ValidateSettingAsync_ShouldValidateIpAddresses(string key, string value, bool expectedValid)
@@ -141,14 +137,14 @@ public class SettingsServiceTests
 	}
 
 	[Theory]
-	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET_MASK, "255.255.255.0", true)]
-	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET_MASK, "255.255.255.128", true)]
-	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET_MASK, "255.255.0.0", true)]
-	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET_MASK, "255.255.255.255", true)]
-	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET_MASK, "255.255.255.192", true)]
-	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET_MASK, "255.255.255.1", false)] // Not contiguous
-	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET_MASK, "invalid", false)]
-	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET_MASK, "256.255.255.0", false)]
+	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET, "255.255.255.0", true)]
+	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET, "255.255.255.128", true)]
+	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET, "255.255.0.0", true)]
+	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET, "255.255.255.255", true)]
+	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET, "255.255.255.192", true)]
+	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET, "255.255.255.1", false)] // Not contiguous
+	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET, "invalid", false)]
+	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET, "256.255.255.0", false)]
 	public async Task ValidateSettingAsync_ShouldValidateSubnetMasks(string key, string value, bool expectedValid)
 	{
 		// Act

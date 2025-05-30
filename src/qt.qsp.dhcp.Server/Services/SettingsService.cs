@@ -41,8 +41,7 @@ public class SettingsService(IGrainFactory grainFactory, INetworkUtilityService 
 			SettingsConstants.DHCP_LEASE_TIME => TimeSpan.TryParse(value, out var leaseTime) && leaseTime > TimeSpan.Zero,
 			SettingsConstants.DHCP_LEASE_RENEWAL => TimeSpan.TryParse(value, out var renewalTime) && renewalTime > TimeSpan.Zero,
 			SettingsConstants.DHCP_LEASE_REBINDING => TimeSpan.TryParse(value, out var rebindingTime) && rebindingTime > TimeSpan.Zero,
-			SettingsConstants.DHCP_LEASE_SUBNET => IsValidIpAddress(value),
-			SettingsConstants.DHCP_LEASE_SUBNET_MASK => IsValidSubnetMask(value),
+			SettingsConstants.DHCP_LEASE_SUBNET => IsValidSubnetMask(value),
 			SettingsConstants.DHCP_LEASE_ROUTER => IsValidIpAddress(value),
 			SettingsConstants.DHCP_LEASE_DNS => ValidateDnsServers(value),
 			_ => true // Allow unknown settings for extensibility

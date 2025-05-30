@@ -234,9 +234,9 @@ else if (editableSettings != null)
 			var leaseTime = await GetSettingsValue<TimeSpan>(SettingsConstants.DHCP_LEASE_TIME);
 			var renewalTime = await GetSettingsValue<TimeSpan>(SettingsConstants.DHCP_LEASE_RENEWAL);
 			var rebindingTime = await GetSettingsValue<TimeSpan>(SettingsConstants.DHCP_LEASE_REBINDING);
-			var subnet = await GetSettingsValue<string>(SettingsConstants.DHCP_LEASE_SUBNET);
-			var subnetMask = await GetSettingsValueSafe<string>(SettingsConstants.DHCP_LEASE_SUBNET_MASK);
+			var subnetMask = await GetSettingsValue<string>(SettingsConstants.DHCP_LEASE_SUBNET);
 			var router = await GetSettingsValue<string>(SettingsConstants.DHCP_LEASE_ROUTER);
+			var subnet = CalculateSubnetFromRouterAndMask(router, subnetMask);
 			var dns = await GetSettingsValue<string[]>(SettingsConstants.DHCP_LEASE_DNS);
 
 			editableSettings = new EditableSettings
@@ -305,8 +305,7 @@ else if (editableSettings != null)
 				(SettingsConstants.DHCP_LEASE_TIME, editableSettings.LeaseTime),
 				(SettingsConstants.DHCP_LEASE_RENEWAL, editableSettings.RenewalTime),
 				(SettingsConstants.DHCP_LEASE_REBINDING, editableSettings.RebindingTime),
-				(SettingsConstants.DHCP_LEASE_SUBNET, editableSettings.Subnet),
-				(SettingsConstants.DHCP_LEASE_SUBNET_MASK, editableSettings.SubnetMask),
+				(SettingsConstants.DHCP_LEASE_SUBNET, editableSettings.SubnetMask),
 				(SettingsConstants.DHCP_LEASE_ROUTER, editableSettings.Router),
 				(SettingsConstants.DHCP_LEASE_DNS, editableSettings.Dns)
 			};
@@ -495,10 +494,24 @@ else if (editableSettings != null)
 		SettingsConstants.DHCP_LEASE_TIME => "Lease Time",
 		SettingsConstants.DHCP_LEASE_RENEWAL => "Renewal Time",
 		SettingsConstants.DHCP_LEASE_REBINDING => "Rebinding Time",
-		SettingsConstants.DHCP_LEASE_SUBNET => "Subnet",
-		SettingsConstants.DHCP_LEASE_SUBNET_MASK => "Subnet Mask",
+		SettingsConstants.DHCP_LEASE_SUBNET => "Subnet Mask",
 		SettingsConstants.DHCP_LEASE_ROUTER => "Router",
 		SettingsConstants.DHCP_LEASE_DNS => "DNS Servers",
 		_ => key
 	};
+
+	private string CalculateSubnetFromRouterAndMask(string? routerIp, string? subnetMask)
+	{
+		try
+		{
+			if (string.IsNullOrEmpty(routerIp) || string.IsNullOrEmpty(subnetMask))
+				return string.Empty;
+
+			return NetworkUtilityService.CalculateNetworkAddress(routerIp, subnetMask);
+		}
+		catch
+		{
+			return string.Empty;
+		}
+	}
 }

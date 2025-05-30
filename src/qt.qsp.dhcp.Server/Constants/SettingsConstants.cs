@@ -10,7 +10,6 @@ public static class SettingsConstants
 	public const string DHCP_LEASE_REBINDING = nameof(DHCP_LEASE_REBINDING);
 
 	public const string DHCP_LEASE_SUBNET = nameof(DHCP_LEASE_SUBNET);
-	public const string DHCP_LEASE_SUBNET_MASK = nameof(DHCP_LEASE_SUBNET_MASK);
 	public const string DHCP_LEASE_ROUTER = nameof(DHCP_LEASE_ROUTER);
 
 	public const string DHCP_LEASE_DNS = nameof(DHCP_LEASE_DNS);
