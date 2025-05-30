@@ -3,10 +3,12 @@
 @using qt.qsp.dhcp.Server.Constants
 @using qt.qsp.dhcp.Server.Services
 @using qt.qsp.dhcp.Server.Models
+@using qt.qsp.dhcp.Server.Utilities
 @using System.ComponentModel.DataAnnotations
 
 @inject IClusterClient ClusterClient
 @inject ISettingsService SettingsService
+@inject INetworkUtilityService NetworkUtilityService
 
 <h3>Settings</h3>
 
@@ -103,10 +105,32 @@ else if (editableSettings != null)
 					</div>
 					<div class="card-body">
 						<div class="mb-3">
+							<label for="networkInterface" class="form-label">Network Interface</label>
+							<select id="networkInterface" class="form-control" @onchange="OnNetworkInterfaceChanged">
+								<option value="">Select a network interface...</option>
+								@if (networkInterfaces != null)
+								{
+									@foreach (var kvp in networkInterfaces)
+									{
+										<option value="@kvp.Value">@kvp.Key</option>
+									}
+								}
+							</select>
+							<div class="form-text">Select the network interface for DHCP server</div>
+						</div>
+						
+						<div class="mb-3">
 							<label for="subnet" class="form-label">Subnet</label>
 							<InputText id="subnet" class="form-control" @bind-Value="editableSettings.Subnet" placeholder="192.168.1.0" />
 							<ValidationMessage For="() => editableSettings.Subnet" class="text-danger" />
 							<div class="form-text">The network subnet address</div>
+						</div>
+						
+						<div class="mb-3">
+							<label for="subnetMask" class="form-label">Subnet Mask</label>
+							<InputText id="subnetMask" class="form-control" @bind-Value="editableSettings.SubnetMask" placeholder="255.255.255.0" />
+							<ValidationMessage For="() => editableSettings.SubnetMask" class="text-danger" />
+							<div class="form-text">The subnet mask (e.g., 255.255.255.0)</div>
 						</div>
 						
 						<div class="mb-3">
@@ -115,6 +139,18 @@ else if (editableSettings != null)
 							<ValidationMessage For="() => editableSettings.Router" class="text-danger" />
 							<div class="form-text">The default gateway IP address</div>
 						</div>
+						
+						@if (!string.IsNullOrEmpty(editableSettings.Subnet) && !string.IsNullOrEmpty(editableSettings.SubnetMask))
+						{
+							<div class="alert alert-info">
+								<small>
+									<strong>Network Info:</strong><br />
+									First usable IP: @CalculateFirstUsableIp()<br />
+									Last usable IP: @CalculateLastUsableIp()<br />
+									DHCP Range: @editableSettings.RangeLow - @editableSettings.RangeHigh
+								</small>
+							</div>
+						}
 					</div>
 				</div>
 			</div>
@@ -160,6 +196,7 @@ else if (editableSettings != null)
 @code {
 	private EditableSettings? editableSettings;
 	private EditableSettings? originalSettings;
+	private Dictionary<string, string>? networkInterfaces;
 	private bool isLoading = true;
 	private bool isSaving = false;
 	private bool showSuccessMessage = false;
@@ -169,6 +206,20 @@ else if (editableSettings != null)
 	protected override async Task OnInitializedAsync()
 	{
 		await LoadSettings();
+		LoadNetworkInterfaces();
+	}
+
+	private void LoadNetworkInterfaces()
+	{
+		try
+		{
+			networkInterfaces = SettingsService.GetAvailableNetworkInterfaces();
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"Error loading network interfaces: {ex.Message}");
+			networkInterfaces = new Dictionary<string, string>();
+		}
 	}
 
 	private async Task LoadSettings()
@@ -184,6 +235,7 @@ else if (editableSettings != null)
 			var renewalTime = await GetSettingsValue<TimeSpan>(SettingsConstants.DHCP_LEASE_RENEWAL);
 			var rebindingTime = await GetSettingsValue<TimeSpan>(SettingsConstants.DHCP_LEASE_REBINDING);
 			var subnet = await GetSettingsValue<string>(SettingsConstants.DHCP_LEASE_SUBNET);
+			var subnetMask = await GetSettingsValueSafe<string>(SettingsConstants.DHCP_LEASE_SUBNET_MASK);
 			var router = await GetSettingsValue<string>(SettingsConstants.DHCP_LEASE_ROUTER);
 			var dns = await GetSettingsValue<string[]>(SettingsConstants.DHCP_LEASE_DNS);
 
@@ -195,6 +247,7 @@ else if (editableSettings != null)
 				RenewalTime = FormatTimeSpan(renewalTime),
 				RebindingTime = FormatTimeSpan(rebindingTime),
 				Subnet = subnet ?? string.Empty,
+				SubnetMask = subnetMask ?? "255.255.255.0", // Default subnet mask
 				Router = router ?? string.Empty,
 				Dns = dns != null ? string.Join(";", dns) : string.Empty
 			};
@@ -208,6 +261,7 @@ else if (editableSettings != null)
 				RenewalTime = editableSettings.RenewalTime,
 				RebindingTime = editableSettings.RebindingTime,
 				Subnet = editableSettings.Subnet,
+				SubnetMask = editableSettings.SubnetMask,
 				Router = editableSettings.Router,
 				Dns = editableSettings.Dns
 			};
@@ -252,6 +306,7 @@ else if (editableSettings != null)
 				(SettingsConstants.DHCP_LEASE_RENEWAL, editableSettings.RenewalTime),
 				(SettingsConstants.DHCP_LEASE_REBINDING, editableSettings.RebindingTime),
 				(SettingsConstants.DHCP_LEASE_SUBNET, editableSettings.Subnet),
+				(SettingsConstants.DHCP_LEASE_SUBNET_MASK, editableSettings.SubnetMask),
 				(SettingsConstants.DHCP_LEASE_ROUTER, editableSettings.Router),
 				(SettingsConstants.DHCP_LEASE_DNS, editableSettings.Dns)
 			};
@@ -262,6 +317,26 @@ else if (editableSettings != null)
 				if (!await SettingsService.ValidateSettingAsync(key, value))
 				{
 					errorMessage = $"Invalid value for {GetDisplayName(key)}: {value}";
+					showErrorMessage = true;
+					return;
+				}
+			}
+			
+			// Additional validation for network consistency
+			if (!string.IsNullOrEmpty(editableSettings.Subnet) && !string.IsNullOrEmpty(editableSettings.SubnetMask) && !string.IsNullOrEmpty(editableSettings.Router))
+			{
+				try
+				{
+					if (!NetworkUtilityService.IsIpInRange(editableSettings.Router, editableSettings.Subnet, editableSettings.SubnetMask))
+					{
+						errorMessage = "Router IP must be within the subnet range";
+						showErrorMessage = true;
+						return;
+					}
+				}
+				catch (Exception ex)
+				{
+					errorMessage = $"Network validation error: {ex.Message}";
 					showErrorMessage = true;
 					return;
 				}
@@ -282,6 +357,7 @@ else if (editableSettings != null)
 				RenewalTime = editableSettings.RenewalTime,
 				RebindingTime = editableSettings.RebindingTime,
 				Subnet = editableSettings.Subnet,
+				SubnetMask = editableSettings.SubnetMask,
 				Router = editableSettings.Router,
 				Dns = editableSettings.Dns
 			};
@@ -311,6 +387,7 @@ else if (editableSettings != null)
 			editableSettings.RenewalTime = originalSettings.RenewalTime;
 			editableSettings.RebindingTime = originalSettings.RebindingTime;
 			editableSettings.Subnet = originalSettings.Subnet;
+			editableSettings.SubnetMask = originalSettings.SubnetMask;
 			editableSettings.Router = originalSettings.Router;
 			editableSettings.Dns = originalSettings.Dns;
 			editableSettings.IsModified = false;
@@ -328,11 +405,82 @@ else if (editableSettings != null)
 		showErrorMessage = false;
 	}
 
+	private void OnNetworkInterfaceChanged(ChangeEventArgs e)
+	{
+		if (editableSettings != null && e.Value != null)
+		{
+			var selectedIp = e.Value.ToString();
+			if (!string.IsNullOrEmpty(selectedIp))
+			{
+				// Auto-populate subnet and router based on selected interface
+				// This is a basic implementation - you might want more sophisticated logic
+				var ipParts = selectedIp.Split('.');
+				if (ipParts.Length == 4)
+				{
+					editableSettings.Subnet = $"{ipParts[0]}.{ipParts[1]}.{ipParts[2]}.0";
+					editableSettings.Router = $"{ipParts[0]}.{ipParts[1]}.{ipParts[2]}.1";
+					editableSettings.SubnetMask = "255.255.255.0"; // Default to /24
+				}
+			}
+		}
+		StateHasChanged();
+	}
+
+	private string CalculateFirstUsableIp()
+	{
+		try
+		{
+			if (editableSettings != null && !string.IsNullOrEmpty(editableSettings.Subnet))
+			{
+				return NetworkUtilityService.GetFirstUsableIp(editableSettings.Subnet);
+			}
+		}
+		catch
+		{
+			// Ignore calculation errors
+		}
+		return "N/A";
+	}
+
+	private string CalculateLastUsableIp()
+	{
+		try
+		{
+			if (editableSettings != null && !string.IsNullOrEmpty(editableSettings.Subnet) && !string.IsNullOrEmpty(editableSettings.SubnetMask))
+			{
+				var broadcast = NetworkUtilityService.CalculateBroadcastAddress(editableSettings.Subnet, editableSettings.SubnetMask);
+				return NetworkUtilityService.GetLastUsableIp(broadcast);
+			}
+		}
+		catch
+		{
+			// Ignore calculation errors
+		}
+		return "N/A";
+	}
+
 	private async Task<TResult> GetSettingsValue<TResult>(string key)
 	{
 		return await ClusterClient
 			.GetGrain<ISettingsGrain>(key)
 			.GetValue<TResult>();
+	}
+
+	private async Task<TResult?> GetSettingsValueSafe<TResult>(string key) where TResult : class
+	{
+		try
+		{
+			var grain = ClusterClient.GetGrain<ISettingsGrain>(key);
+			if (await grain.HasValue())
+			{
+				return await grain.GetValue<TResult>();
+			}
+		}
+		catch
+		{
+			// Ignore errors for optional settings
+		}
+		return null;
 	}
 
 	private static string FormatTimeSpan(TimeSpan timeSpan)
@@ -348,6 +496,7 @@ else if (editableSettings != null)
 		SettingsConstants.DHCP_LEASE_RENEWAL => "Renewal Time",
 		SettingsConstants.DHCP_LEASE_REBINDING => "Rebinding Time",
 		SettingsConstants.DHCP_LEASE_SUBNET => "Subnet",
+		SettingsConstants.DHCP_LEASE_SUBNET_MASK => "Subnet Mask",
 		SettingsConstants.DHCP_LEASE_ROUTER => "Router",
 		SettingsConstants.DHCP_LEASE_DNS => "DNS Servers",
 		_ => key

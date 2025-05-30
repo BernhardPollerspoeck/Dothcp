@@ -28,6 +28,10 @@ public class EditableSettings
 	[Required(ErrorMessage = "Subnet is required")]
 	public string Subnet { get; set; } = string.Empty;
 
+	[Display(Name = "Subnet Mask")]
+	[Required(ErrorMessage = "Subnet Mask is required")]
+	public string SubnetMask { get; set; } = string.Empty;
+
 	[Display(Name = "Router")]
 	[Required(ErrorMessage = "Router is required")]
 	public string Router { get; set; } = string.Empty;

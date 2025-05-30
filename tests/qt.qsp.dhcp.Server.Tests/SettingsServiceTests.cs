@@ -1,6 +1,7 @@
 using qt.qsp.dhcp.Server.Constants;
 using qt.qsp.dhcp.Server.Grains.Settings;
 using qt.qsp.dhcp.Server.Services;
+using qt.qsp.dhcp.Server.Utilities;
 using Moq;
 using Xunit;
 
@@ -10,13 +11,15 @@ public class SettingsServiceTests
 {
 	private readonly Mock<IGrainFactory> _mockGrainFactory;
 	private readonly Mock<ISettingsGrain> _mockSettingsGrain;
+	private readonly Mock<INetworkUtilityService> _mockNetworkUtilityService;
 	private readonly SettingsService _settingsService;
 
 	public SettingsServiceTests()
 	{
 		_mockGrainFactory = new Mock<IGrainFactory>();
 		_mockSettingsGrain = new Mock<ISettingsGrain>();
-		_settingsService = new SettingsService(_mockGrainFactory.Object);
+		_mockNetworkUtilityService = new Mock<INetworkUtilityService>();
+		_settingsService = new SettingsService(_mockGrainFactory.Object, _mockNetworkUtilityService.Object);
 
 		_mockGrainFactory
 			.Setup(f => f.GetGrain<ISettingsGrain>(It.IsAny<string>(), It.IsAny<string>()))
@@ -135,5 +138,42 @@ public class SettingsServiceTests
 
 		// Assert
 		Assert.True(result);
+	}
+
+	[Theory]
+	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET_MASK, "255.255.255.0", true)]
+	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET_MASK, "255.255.255.128", true)]
+	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET_MASK, "255.255.0.0", true)]
+	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET_MASK, "255.255.255.255", true)]
+	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET_MASK, "255.255.255.192", true)]
+	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET_MASK, "255.255.255.1", false)] // Not contiguous
+	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET_MASK, "invalid", false)]
+	[InlineData(SettingsConstants.DHCP_LEASE_SUBNET_MASK, "256.255.255.0", false)]
+	public async Task ValidateSettingAsync_ShouldValidateSubnetMasks(string key, string value, bool expectedValid)
+	{
+		// Act
+		var result = await _settingsService.ValidateSettingAsync(key, value);
+
+		// Assert
+		Assert.Equal(expectedValid, result);
+	}
+
+	[Fact]
+	public void GetAvailableNetworkInterfaces_ShouldCallNetworkUtilityService()
+	{
+		// Arrange
+		var expectedInterfaces = new Dictionary<string, string>
+		{
+			{ "Interface 1 (192.168.1.1)", "192.168.1.1" },
+			{ "Interface 2 (10.0.0.1)", "10.0.0.1" }
+		};
+		_mockNetworkUtilityService.Setup(n => n.GetAvailableNetworkInterfaces()).Returns(expectedInterfaces);
+
+		// Act
+		var result = _settingsService.GetAvailableNetworkInterfaces();
+
+		// Assert
+		Assert.Equal(expectedInterfaces, result);
+		_mockNetworkUtilityService.Verify(n => n.GetAvailableNetworkInterfaces(), Times.Once);
 	}
 }

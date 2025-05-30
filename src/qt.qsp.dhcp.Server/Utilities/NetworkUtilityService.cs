@@ -197,4 +197,46 @@ public class NetworkUtilityService : INetworkUtilityService
             return false;
         }
     }
+    
+    /// <summary>
+    /// Gets available network interfaces with their IP addresses
+    /// </summary>
+    /// <returns>Dictionary with interface name as key and IP address as value</returns>
+    public Dictionary<string, string> GetAvailableNetworkInterfaces()
+    {
+        var interfaces = new Dictionary<string, string>();
+        
+        try
+        {
+            var networkInterfaces = NetworkInterface.GetAllNetworkInterfaces();
+            
+            foreach (var networkInterface in networkInterfaces)
+            {
+                // Skip loopback and inactive interfaces
+                if (networkInterface.NetworkInterfaceType == NetworkInterfaceType.Loopback ||
+                    networkInterface.OperationalStatus != OperationalStatus.Up)
+                    continue;
+                
+                var ipProperties = networkInterface.GetIPProperties();
+                var unicastAddresses = ipProperties.UnicastAddresses;
+                
+                foreach (var address in unicastAddresses)
+                {
+                    // Only include IPv4 addresses
+                    if (address.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                    {
+                        var interfaceName = $"{networkInterface.Name} ({address.Address})";
+                        interfaces.TryAdd(interfaceName, address.Address.ToString());
+                        break; // Only take the first IPv4 address per interface
+                    }
+                }
+            }
+        }
+        catch
+        {
+            // If there's an error, return empty dictionary
+        }
+        
+        return interfaces;
+    }
 }
