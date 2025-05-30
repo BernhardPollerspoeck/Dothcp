@@ -68,18 +68,34 @@ public class DashboardService : IDashboardService
                 if (ni.NetworkInterfaceType == NetworkInterfaceType.Loopback)
                     continue;
 
-                var ipProps = ni.GetIPProperties();
-                var ipAddress = ipProps.UnicastAddresses
-                    .FirstOrDefault(addr => addr.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
-                    ?.Address?.ToString() ?? "No IP";
-
-                interfaces.Add(new NetworkInterfaceInfo
+                try
                 {
-                    Name = ni.Name,
-                    IpAddress = ipAddress,
-                    Status = ni.OperationalStatus,
-                    Description = ni.Description
-                });
+                    var ipProps = ni.GetIPProperties();
+                    var ipAddress = ipProps.UnicastAddresses
+                        .FirstOrDefault(addr => addr.Address.AddressFamily == System.Net.Sockets.AddressFamily.InterNetwork)
+                        ?.Address?.ToString() ?? "No IP";
+
+                    interfaces.Add(new NetworkInterfaceInfo
+                    {
+                        Name = ni.Name,
+                        IpAddress = ipAddress,
+                        Status = ni.OperationalStatus,
+                        Description = ni.Description
+                    });
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Error getting properties for network interface {Name}", ni.Name);
+                    
+                    // Add interface with limited info if we can't get all properties
+                    interfaces.Add(new NetworkInterfaceInfo
+                    {
+                        Name = ni.Name,
+                        IpAddress = "Unknown",
+                        Status = OperationalStatus.Unknown,
+                        Description = ni.Description
+                    });
+                }
             }
         }
         catch (Exception ex)
