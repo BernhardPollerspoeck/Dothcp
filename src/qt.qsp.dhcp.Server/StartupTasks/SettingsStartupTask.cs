@@ -17,11 +17,10 @@ public class SettingsStartupTask(
 		new(SettingsConstants.DHCP_LEASE_RENEWAL, "12:00:00"),
 		new(SettingsConstants.DHCP_LEASE_REBINDING, "21:00:00"),
 
-		new(SettingsConstants.DHCP_LEASE_SUBNET, "192.168.1.0"),
-		new(SettingsConstants.DHCP_LEASE_SUBNET_MASK, "255.255.255.0"),
-		new(SettingsConstants.DHCP_LEASE_ROUTER, "192.168.1.1"),
+		new(SettingsConstants.DHCP_LEASE_SUBNET, "255.255.255.0"),
+		new(SettingsConstants.DHCP_LEASE_ROUTER, "192.168.0.1"),
 
-		new(SettingsConstants.DHCP_LEASE_DNS, "192.168.1.1;8.8.8.8"),
+		new(SettingsConstants.DHCP_LEASE_DNS, "192.168.0.1;8.8.8.8"),
 		new(SettingsConstants.DHCP_LEASE_NTP_SERVERS, "141.76.10.160;134.28.202.2")
 	];
 
