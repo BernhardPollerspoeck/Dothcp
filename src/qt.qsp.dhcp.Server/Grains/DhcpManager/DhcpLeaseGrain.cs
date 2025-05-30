@@ -87,7 +87,7 @@ public class DhcpLeaseGrain : Grain, IDhcpLeaseGrain
             return Task.FromResult(true); // No lease means effectively expired
         }
         
-        bool expired = _leaseState.State.IsExpired();
+        var expired = _leaseState.State.IsExpired();
         
         // If expired but not marked as such, mark it
         if (expired && _leaseState.State.Status != LeaseStatus.Expired)

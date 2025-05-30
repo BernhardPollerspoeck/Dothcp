@@ -18,7 +18,7 @@ public class LeaseGrainSearchService : ILeaseGrainSearchService
 
         // Iterate through potential IPs in the range
         // This is a simple implementation example - could be optimized or expanded to cover more ranges
-        for (int i = 1; i <= 254; i++)
+        for (var i = 1; i <= 254; i++)
         {
             var ipToCheck = $"{ipRange}{i}";
             var leaseGrain = grainFactory.GetGrain<IDhcpLeaseGrain>(ipToCheck);

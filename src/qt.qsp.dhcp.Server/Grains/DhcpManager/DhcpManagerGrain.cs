@@ -44,7 +44,7 @@ public class DhcpManagerGrain(
 		var ipRange = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_IP_RANGE);
 		
 		// Use the injected LeaseGrainSearchService to find a lease by MAC
-		var existingLease = await leaseGrainSearchService.FindLeaseByMac(this.GrainFactory, macAddress, ipRange);
+		var existingLease = await leaseGrainSearchService.FindLeaseByMac(GrainFactory, macAddress, ipRange);
 		
 		if (existingLease != null && !existingLease.IsExpired())
 		{
@@ -99,6 +99,36 @@ public class DhcpManagerGrain(
 		return null;
 	}
 
+	// Helper method to create NAK message
+	private DhcpMessage CreateNakMessage(DhcpMessage requestMessage, string reason)
+	{
+		// Log the NAK reason
+		logger.LogWarning("Sending DHCPNAK to client {clientId}: {reason}", this.GetPrimaryKeyString(), reason);
+		
+		// Get the local IP address for the server identifier
+		var localIp = OfferGeneratorService.GetLocalIpAddress();
+		
+		// Create options for the NAK message
+		var optionsBuilder = new DhcpOptionsBuilder()
+			.AddMessageType(EMessageType.Nak)
+			.AddServerIdentifier(localIp);
+		
+		// Return a properly constructed NAK message
+		return new DhcpMessage
+		{
+			Direction = EMessageDirection.Reply,
+			HardwareType = requestMessage.HardwareType,
+			ClientIdLength = requestMessage.ClientIdLength,
+			Hops = 0,
+			TransactionId = requestMessage.TransactionId,
+			ResponseCastType = requestMessage.ResponseCastType,
+			ClientIpAdress = 0, // NAK should have 0.0.0.0 in ciaddr
+			AssigneeAdress = 0, // NAK should have 0.0.0.0 in yiaddr
+			ServerIpAdress = BitConverter.ToUInt32(localIp.GetAddressBytes()),
+			ClientHardwareAdress = requestMessage.ClientHardwareAdress,
+			Options = optionsBuilder.Build()
+		};
+	}
 
 	public async Task<DhcpMessage?> HandleRequest(DhcpMessage message)
 	{
@@ -119,32 +149,52 @@ public class DhcpManagerGrain(
 		{
 			// Unable to determine which IP address the client wants
 			logger.LogWarning("DHCP Request from client {clientId} doesn't specify an IP address", this.GetPrimaryKeyString());
-			return null;
+			return CreateNakMessage(message, "No IP address specified in request");
+		}
+		
+		// Get network configuration from settings
+		var ipRange = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_IP_RANGE);
+		var subnetMask = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
+		
+		// Calculate the network address
+		var networkAddress = networkUtilityService.CalculateNetworkAddress(ipRange, subnetMask);
+		
+		// Check if the requested IP is in the correct subnet
+		if (!networkUtilityService.IsIpInRange(requestedIp, networkAddress, subnetMask))
+		{
+			return CreateNakMessage(message, $"Requested IP {requestedIp} is not in the configured subnet");
+		}
+		
+		// Check if the address is a reserved address (network or broadcast)
+		var broadcastAddress = networkUtilityService.CalculateBroadcastAddress(ipRange, subnetMask);
+		if (networkUtilityService.IsReservedIp(requestedIp, networkAddress, broadcastAddress))
+		{
+			return CreateNakMessage(message, $"Requested IP {requestedIp} is a reserved address (network or broadcast)");
 		}
 		
 		// Check if the address is available or already offered to this client
-		var ipAddressGrain = this.GrainFactory.GetGrain<IIpAddressInformationGrain>(requestedIp);
+		var ipAddressGrain = GrainFactory.GetGrain<IIpAddressInformationGrain>(requestedIp);
 		var ipStatus = await ipAddressGrain.GetStatus();
 		
 		if (ipStatus.Status == EIpAddressStatus.Available)
 		{
 			// IP is available but wasn't offered to this client - shouldn't happen in normal flow
 			logger.LogWarning("Client {clientId} requested IP {requestedIp} which wasn't offered", this.GetPrimaryKeyString(), requestedIp);
-			return null;
+			return CreateNakMessage(message, $"IP {requestedIp} was not offered to this client");
 		}
 		
 		if (ipStatus.Status == EIpAddressStatus.Claimed && ipStatus.ClientId != this.GetPrimaryKeyString())
 		{
 			// IP is already claimed by another client
 			logger.LogWarning("Client {clientId} requested IP {requestedIp} which is claimed by another client", this.GetPrimaryKeyString(), requestedIp);
-			return null;
+			return CreateNakMessage(message, $"IP {requestedIp} is already leased to another client");
 		}
 		
 		if (ipStatus.Status == EIpAddressStatus.Offered && ipStatus.ClientId != this.GetPrimaryKeyString())
 		{
 			// IP was offered to another client
 			logger.LogWarning("Client {clientId} requested IP {requestedIp} which was offered to another client", this.GetPrimaryKeyString(), requestedIp);
-			return null;
+			return CreateNakMessage(message, $"IP {requestedIp} was offered to another client");
 		}
 		
 		// Update IP status to Claimed
@@ -160,7 +210,7 @@ public class DhcpManagerGrain(
 		var leaseDuration = await settingsLoader.GetSetting<TimeSpan>(SettingsConstants.DHCP_LEASE_TIME);
 		
 		// Create or update lease in the lease grain directly
-		var leaseGrain = this.GrainFactory.GetGrain<IDhcpLeaseGrain>(requestedIp);
+		var leaseGrain = GrainFactory.GetGrain<IDhcpLeaseGrain>(requestedIp);
 		var macAddress = BitConverter.ToString(message.ClientHardwareAdress).Replace("-", ":");
 		var lease = new DhcpLease
 		{
@@ -215,9 +265,7 @@ public class DhcpManagerGrain(
 					break;
 
 				case EOption.BroadcastAddressOption:
-					var ipRange = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_IP_RANGE);
-					var subnet = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
-					optionsBuilder.AddBroadcastAddressOption(networkUtilityService.CalculateBroadcastAddress(ipRange, subnet));
+					optionsBuilder.AddBroadcastAddressOption(broadcastAddress);
 					break;
 
 				case EOption.NtpServers:

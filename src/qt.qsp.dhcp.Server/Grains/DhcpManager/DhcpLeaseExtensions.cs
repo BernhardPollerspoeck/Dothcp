@@ -10,7 +10,7 @@ public static class DhcpLeaseExtensions
     public static string ToMacAddressString(this byte[] macBytes)
     {
         var sb = new StringBuilder(macBytes.Length * 3 - 1);
-        for (int i = 0; i < macBytes.Length; i++)
+        for (var i = 0; i < macBytes.Length; i++)
         {
             sb.Append(macBytes[i].ToString("X2"));
             if (i < macBytes.Length - 1)
@@ -26,7 +26,7 @@ public static class DhcpLeaseExtensions
     {
         var parts = macAddress.Split(':');
         var bytes = new byte[parts.Length];
-        for (int i = 0; i < parts.Length; i++)
+        for (var i = 0; i < parts.Length; i++)
         {
             bytes[i] = Convert.ToByte(parts[i], 16);
         }
