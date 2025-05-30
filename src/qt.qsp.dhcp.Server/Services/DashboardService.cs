@@ -2,6 +2,8 @@ using Orleans;
 using qt.qsp.dhcp.Server.Grains.DhcpManager;
 using System.Net.NetworkInformation;
 using System.Diagnostics;
+using qt.qsp.dhcp.Server.Constants;
+using qt.qsp.dhcp.Server.Utilities;
 
 namespace qt.qsp.dhcp.Server.Services;
 
@@ -10,16 +12,22 @@ public class DashboardService : IDashboardService
     private readonly IGrainFactory _grainFactory;
     private readonly ILeaseGrainSearchService _leaseSearchService;
     private readonly ILogger<DashboardService> _logger;
+    private readonly ISettingsLoaderService _settingsLoader;
+    private readonly INetworkUtilityService _networkUtility;
     private static readonly DateTime _serverStartTime = DateTime.UtcNow;
 
     public DashboardService(
         IGrainFactory grainFactory,
         ILeaseGrainSearchService leaseSearchService,
-        ILogger<DashboardService> logger)
+        ILogger<DashboardService> logger,
+        ISettingsLoaderService settingsLoader,
+        INetworkUtilityService networkUtility)
     {
         _grainFactory = grainFactory;
         _leaseSearchService = leaseSearchService;
         _logger = logger;
+        _settingsLoader = settingsLoader;
+        _networkUtility = networkUtility;
     }
 
     public async Task<DashboardData> GetDashboardDataAsync()
@@ -114,18 +122,39 @@ public class DashboardService : IDashboardService
     {
         try
         {
-            // This is a simplified implementation
-            // In a real scenario, you'd iterate through configured IP ranges
-            const string sampleIpRange = "192.168.1.";
-            const int totalAddresses = 254; // .1 to .254
-            var activeLeases = 0;
+            // Get DHCP configuration from settings
+            var minAddress = await _settingsLoader.GetSetting<byte>(SettingsConstants.DHCP_RANGE_LOW);
+            var maxAddress = await _settingsLoader.GetSetting<byte>(SettingsConstants.DHCP_RANGE_HIGH);
+            var routerBytes = await _settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER);
+            var subnetMask = await _settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
 
-            // Sample check of first 50 IPs to get an estimate
-            for (var i = 1; i <= 50; i++)
+            // Build the network base (first 3 octets)
+            var networkBase = string.Join('.', routerBytes[0..^1]);
+            
+            // Calculate actual address space
+            var totalAddresses = maxAddress - minAddress + 1;
+            
+            // Calculate network and broadcast addresses to exclude reserved IPs
+            var networkAddress = _networkUtility.CalculateNetworkAddress($"{networkBase}.0", subnetMask);
+            var broadcastAddress = _networkUtility.CalculateBroadcastAddress($"{networkBase}.0", subnetMask);
+            
+            var activeLeases = 0;
+            var reservedAddresses = 0;
+
+            // Check all IPs in the configured range
+            for (var i = minAddress; i <= maxAddress; i++)
             {
                 try
                 {
-                    var ipAddress = $"{sampleIpRange}{i}";
+                    var ipAddress = $"{networkBase}.{i}";
+                    
+                    // Count reserved addresses (network and broadcast)
+                    if (_networkUtility.IsReservedIp(ipAddress, networkAddress, broadcastAddress))
+                    {
+                        reservedAddresses++;
+                        continue;
+                    }
+                    
                     var leaseGrain = _grainFactory.GetGrain<IDhcpLeaseGrain>(ipAddress);
                     var lease = await leaseGrain.GetLease();
                     
@@ -136,24 +165,21 @@ public class DashboardService : IDashboardService
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogDebug(ex, "Error checking lease for IP {IpAddress}", $"{sampleIpRange}{i}");
+                    _logger.LogDebug(ex, "Error checking lease for IP {IpAddress}", $"{networkBase}.{i}");
                 }
             }
-
-            // Extrapolate the count (this is a rough estimate)
-            var estimatedActiveLeases = (int)((double)activeLeases / 50 * totalAddresses);
 
             return new LeaseStatistics
             {
                 TotalAddresses = totalAddresses,
-                LeasedAddresses = estimatedActiveLeases,
-                ReservedAddresses = 10 // Placeholder - would need configuration data
+                LeasedAddresses = activeLeases,
+                ReservedAddresses = reservedAddresses
             };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting lease statistics");
-            return new LeaseStatistics { TotalAddresses = 254, LeasedAddresses = 0, ReservedAddresses = 0 };
+            return new LeaseStatistics { TotalAddresses = 0, LeasedAddresses = 0, ReservedAddresses = 0 };
         }
     }
 
@@ -163,14 +189,32 @@ public class DashboardService : IDashboardService
 
         try
         {
-            // Sample recent leases from a range
-            const string sampleIpRange = "192.168.1.";
+            // Get DHCP configuration from settings
+            var minAddress = await _settingsLoader.GetSetting<byte>(SettingsConstants.DHCP_RANGE_LOW);
+            var maxAddress = await _settingsLoader.GetSetting<byte>(SettingsConstants.DHCP_RANGE_HIGH);
+            var routerBytes = await _settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER);
+            var subnetMask = await _settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
+
+            // Build the network base (first 3 octets)
+            var networkBase = string.Join('.', routerBytes[0..^1]);
             
-            for (var i = 1; i <= 20; i++) // Check first 20 IPs for recent activity
+            // Calculate network and broadcast addresses to skip reserved IPs
+            var networkAddress = _networkUtility.CalculateNetworkAddress($"{networkBase}.0", subnetMask);
+            var broadcastAddress = _networkUtility.CalculateBroadcastAddress($"{networkBase}.0", subnetMask);
+            
+            // Check all IPs in the configured range for active leases
+            for (var i = minAddress; i <= maxAddress; i++)
             {
                 try
                 {
-                    var ipAddress = $"{sampleIpRange}{i}";
+                    var ipAddress = $"{networkBase}.{i}";
+                    
+                    // Skip reserved addresses (network and broadcast)
+                    if (_networkUtility.IsReservedIp(ipAddress, networkAddress, broadcastAddress))
+                    {
+                        continue;
+                    }
+                    
                     var leaseGrain = _grainFactory.GetGrain<IDhcpLeaseGrain>(ipAddress);
                     var lease = await leaseGrain.GetLease();
                     
@@ -181,11 +225,11 @@ public class DashboardService : IDashboardService
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogDebug(ex, "Error getting lease for IP {IpAddress}", $"{sampleIpRange}{i}");
+                    _logger.LogDebug(ex, "Error getting lease for IP {IpAddress}", $"{networkBase}.{i}");
                 }
             }
 
-            // Sort by most recent lease start time
+            // Sort by most recent lease start time and take the most recent 10
             return recentLeases
                 .OrderByDescending(l => l.LeaseStart)
                 .Take(10)
