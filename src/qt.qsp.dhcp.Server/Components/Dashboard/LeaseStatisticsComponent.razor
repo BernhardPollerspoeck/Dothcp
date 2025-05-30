@@ -1,0 +1,120 @@
+@using qt.qsp.dhcp.Server.Services
+
+<div class="card">
+    <div class="card-header">
+        <h5 class="card-title mb-0">Lease Utilization</h5>
+    </div>
+    <div class="card-body">
+        <div class="row">
+            <div class="col-md-8">
+                <div class="mb-3">
+                    <div class="d-flex justify-content-between mb-1">
+                        <span>IP Address Usage</span>
+                        <span>@Statistics.LeasedAddresses / @Statistics.TotalAddresses (@Statistics.UtilizationPercentage.ToString("F1")%)</span>
+                    </div>
+                    <div class="progress" style="height: 20px;">
+                        <div class="progress-bar @GetUtilizationColorClass()" 
+                             role="progressbar" 
+                             style="width: @(Statistics.UtilizationPercentage)%"
+                             aria-valuenow="@Statistics.UtilizationPercentage" 
+                             aria-valuemin="0" 
+                             aria-valuemax="100">
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="row text-center">
+                    <div class="col-3">
+                        <div class="border rounded p-2">
+                            <div class="h4 mb-0 text-primary">@Statistics.TotalAddresses</div>
+                            <small class="text-muted">Total</small>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="border rounded p-2">
+                            <div class="h4 mb-0 text-success">@Statistics.LeasedAddresses</div>
+                            <small class="text-muted">Leased</small>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="border rounded p-2">
+                            <div class="h4 mb-0 text-warning">@Statistics.ReservedAddresses</div>
+                            <small class="text-muted">Reserved</small>
+                        </div>
+                    </div>
+                    <div class="col-3">
+                        <div class="border rounded p-2">
+                            <div class="h4 mb-0 text-info">@Statistics.AvailableAddresses</div>
+                            <small class="text-muted">Available</small>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4">
+                <div class="text-center">
+                    <div class="mb-3">
+                        <div class="display-4 @GetUtilizationTextColorClass()">
+                            @Statistics.UtilizationPercentage.ToString("F1")%
+                        </div>
+                        <small class="text-muted">Utilization</small>
+                    </div>
+                    
+                    <div class="@GetUtilizationAlertClass()" role="alert" style="@GetUtilizationAlertStyle()">
+                        @GetUtilizationMessage()
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public LeaseStatistics Statistics { get; set; } = new();
+
+    private string GetUtilizationColorClass()
+    {
+        return Statistics.UtilizationPercentage switch
+        {
+            <= 50 => "bg-success",
+            <= 80 => "bg-warning",
+            _ => "bg-danger"
+        };
+    }
+
+    private string GetUtilizationTextColorClass()
+    {
+        return Statistics.UtilizationPercentage switch
+        {
+            <= 50 => "text-success",
+            <= 80 => "text-warning",
+            _ => "text-danger"
+        };
+    }
+
+    private string GetUtilizationAlertClass()
+    {
+        return Statistics.UtilizationPercentage switch
+        {
+            <= 50 => "alert alert-success",
+            <= 80 => "alert alert-warning",
+            _ => "alert alert-danger"
+        };
+    }
+
+    private string GetUtilizationAlertStyle()
+    {
+        return Statistics.UtilizationPercentage > 50 ? "" : "display: none;";
+    }
+
+    private string GetUtilizationMessage()
+    {
+        return Statistics.UtilizationPercentage switch
+        {
+            <= 50 => "Good utilization level",
+            <= 80 => "Moderate utilization - consider monitoring",
+            <= 95 => "High utilization - attention required",
+            _ => "Critical utilization - immediate action needed"
+        };
+    }
+}

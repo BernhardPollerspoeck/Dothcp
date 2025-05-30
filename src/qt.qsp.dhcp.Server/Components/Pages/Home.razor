@@ -1,15 +1,97 @@
-﻿@page "/"
+@page "/"
+@using qt.qsp.dhcp.Server.Services
+@using qt.qsp.dhcp.Server.Components.Dashboard
+@inject IDashboardService DashboardService
 
+<PageTitle>Dashboard - DHCP Server</PageTitle>
 
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="h3">DHCP Server Dashboard</h1>
+            <p class="text-muted">Monitor server status and lease utilization</p>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary" @onclick="RefreshDashboard" disabled="@isLoading">
+                @if (isLoading)
+                {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                }
+                else
+                {
+                    <i class="bi bi-arrow-clockwise me-2"></i>
+                }
+                Refresh
+            </button>
+        </div>
+    </div>
 
-<PageTitle>Home</PageTitle>
+    @if (isLoading && dashboardData == null)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <div class="mt-2">Loading dashboard data...</div>
+        </div>
+    }
+    else if (dashboardData != null)
+    {
+        <div class="row mb-4">
+            <div class="col-12">
+                <ServerStatusComponent ServerStatus="dashboardData.ServerStatus" />
+            </div>
+        </div>
 
+        <div class="row mb-4">
+            <div class="col-12">
+                <LeaseStatisticsComponent Statistics="dashboardData.LeaseStatistics" />
+            </div>
+        </div>
 
-
+        <div class="row">
+            <div class="col-12">
+                <ActiveLeasesComponent RecentLeases="dashboardData.RecentLeases" DhcpNetwork="dashboardData.DhcpNetwork" OnRefresh="RefreshDashboard" />
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-warning" role="alert">
+            <i class="bi bi-exclamation-triangle"></i>
+            Unable to load dashboard data. Please try refreshing the page.
+        </div>
+    }
+</div>
 
 @code {
+    private DashboardData? dashboardData;
+    private bool isLoading = true;
 
-	
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshDashboard();
+    }
 
+    private async Task RefreshDashboard()
+    {
+        isLoading = true;
+        StateHasChanged();
 
+        try
+        {
+            dashboardData = await DashboardService.GetDashboardDataAsync();
+        }
+        catch (Exception ex)
+        {
+            // Log error (in a real app, you'd use proper logging)
+            Console.WriteLine($"Error loading dashboard: {ex.Message}");
+            dashboardData = null;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
 }

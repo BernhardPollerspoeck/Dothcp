@@ -36,6 +36,7 @@ builder.Services.AddTransient<ISettingsLoaderService, SettingsLoaderService>();
 builder.Services.AddTransient<IOfferGeneratorService, OfferGeneratorService>();
 builder.Services.AddTransient<ILeaseGrainSearchService, LeaseGrainSearchService>();
 builder.Services.AddTransient<INetworkUtilityService, NetworkUtilityService>();
+builder.Services.AddTransient<IDashboardService, DashboardService>();
 
 builder.Services.AddHostedService<NetworkListener>();
 
