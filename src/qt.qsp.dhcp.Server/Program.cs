@@ -33,6 +33,7 @@ builder.Host.UseOrleans(static siloBuilder =>
 });
 
 builder.Services.AddTransient<ISettingsLoaderService, SettingsLoaderService>();
+builder.Services.AddTransient<ISettingsService, SettingsService>();
 builder.Services.AddTransient<IOfferGeneratorService, OfferGeneratorService>();
 builder.Services.AddTransient<ILeaseGrainSearchService, LeaseGrainSearchService>();
 builder.Services.AddTransient<INetworkUtilityService, NetworkUtilityService>();

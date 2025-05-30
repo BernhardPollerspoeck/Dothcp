@@ -1,65 +1,332 @@
 ﻿@page "/settings"
 @using qt.qsp.dhcp.Server.Grains.Settings
 @using qt.qsp.dhcp.Server.Constants
+@using qt.qsp.dhcp.Server.Services
+@using qt.qsp.dhcp.Server.Models
+@using System.ComponentModel.DataAnnotations
 
 @inject IClusterClient ClusterClient
-
-
+@inject ISettingsService SettingsService
 
 <h3>Settings</h3>
 
-<p>Range Low: @RangeLow</p>
-<p>Range High: @RangeHigh</p>
-<p>Lease Time: @LeaseTime</p>
-<p>Renewal Time: @RenewalTime</p>
-<p>Rebinding Time: @RebindingTime</p>
-<p>Subnet: @Subnet</p>
-<p>Router: @Router</p>
-
-@if (Dns is not null)
+@if (showSuccessMessage)
 {
-	<p>Dns:</p>
-	<ul>
-		@foreach (var d in Dns)
-		{
-			<li>
-				<p>- @d</p>
-			</li>
-		}
+	<div class="alert alert-success alert-dismissible fade show" role="alert">
+		Settings saved successfully!
+		<button type="button" class="btn-close" @onclick="() => showSuccessMessage = false"></button>
+	</div>
+}
 
-	</ul>
+@if (showErrorMessage)
+{
+	<div class="alert alert-danger alert-dismissible fade show" role="alert">
+		Error saving settings: @errorMessage
+		<button type="button" class="btn-close" @onclick="() => showErrorMessage = false"></button>
+	</div>
+}
+
+@if (isLoading)
+{
+	<div class="text-center py-3">
+		<div class="spinner-border" role="status">
+			<span class="visually-hidden">Loading...</span>
+		</div>
+		<div class="mt-2">Loading settings...</div>
+	</div>
+}
+else if (editableSettings != null)
+{
+	<EditForm Model="editableSettings" OnValidSubmit="SaveSettings">
+		<DataAnnotationsValidator />
+		
+		<div class="row">
+			<div class="col-md-6">
+				<div class="card">
+					<div class="card-header">
+						<h5 class="mb-0">DHCP Range Configuration</h5>
+					</div>
+					<div class="card-body">
+						<div class="mb-3">
+							<label for="rangeLow" class="form-label">Range Low</label>
+							<InputNumber id="rangeLow" class="form-control" @bind-Value="editableSettings.RangeLow" />
+							<ValidationMessage For="() => editableSettings.RangeLow" class="text-danger" />
+							<div class="form-text">The starting IP address for DHCP assignments (1-254)</div>
+						</div>
+						
+						<div class="mb-3">
+							<label for="rangeHigh" class="form-label">Range High</label>
+							<InputNumber id="rangeHigh" class="form-control" @bind-Value="editableSettings.RangeHigh" />
+							<ValidationMessage For="() => editableSettings.RangeHigh" class="text-danger" />
+							<div class="form-text">The ending IP address for DHCP assignments (1-254)</div>
+						</div>
+					</div>
+				</div>
+			</div>
+			
+			<div class="col-md-6">
+				<div class="card">
+					<div class="card-header">
+						<h5 class="mb-0">Lease Timing Configuration</h5>
+					</div>
+					<div class="card-body">
+						<div class="mb-3">
+							<label for="leaseTime" class="form-label">Lease Time (HH:MM:SS)</label>
+							<InputText id="leaseTime" class="form-control" @bind-Value="editableSettings.LeaseTime" placeholder="24:00:00" />
+							<ValidationMessage For="() => editableSettings.LeaseTime" class="text-danger" />
+							<div class="form-text">How long clients can use an IP address</div>
+						</div>
+						
+						<div class="mb-3">
+							<label for="renewalTime" class="form-label">Renewal Time (HH:MM:SS)</label>
+							<InputText id="renewalTime" class="form-control" @bind-Value="editableSettings.RenewalTime" placeholder="12:00:00" />
+							<ValidationMessage For="() => editableSettings.RenewalTime" class="text-danger" />
+							<div class="form-text">When clients should attempt to renew their lease</div>
+						</div>
+						
+						<div class="mb-3">
+							<label for="rebindingTime" class="form-label">Rebinding Time (HH:MM:SS)</label>
+							<InputText id="rebindingTime" class="form-control" @bind-Value="editableSettings.RebindingTime" placeholder="18:00:00" />
+							<ValidationMessage For="() => editableSettings.RebindingTime" class="text-danger" />
+							<div class="form-text">When clients should attempt to rebind their lease</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		
+		<div class="row mt-3">
+			<div class="col-md-6">
+				<div class="card">
+					<div class="card-header">
+						<h5 class="mb-0">Network Configuration</h5>
+					</div>
+					<div class="card-body">
+						<div class="mb-3">
+							<label for="subnet" class="form-label">Subnet</label>
+							<InputText id="subnet" class="form-control" @bind-Value="editableSettings.Subnet" placeholder="192.168.1.0" />
+							<ValidationMessage For="() => editableSettings.Subnet" class="text-danger" />
+							<div class="form-text">The network subnet address</div>
+						</div>
+						
+						<div class="mb-3">
+							<label for="router" class="form-label">Router</label>
+							<InputText id="router" class="form-control" @bind-Value="editableSettings.Router" placeholder="192.168.1.1" />
+							<ValidationMessage For="() => editableSettings.Router" class="text-danger" />
+							<div class="form-text">The default gateway IP address</div>
+						</div>
+					</div>
+				</div>
+			</div>
+			
+			<div class="col-md-6">
+				<div class="card">
+					<div class="card-header">
+						<h5 class="mb-0">DNS Configuration</h5>
+					</div>
+					<div class="card-body">
+						<div class="mb-3">
+							<label for="dns" class="form-label">DNS Servers</label>
+							<InputTextArea id="dns" class="form-control" rows="3" @bind-Value="editableSettings.Dns" placeholder="8.8.8.8;8.8.4.4" />
+							<ValidationMessage For="() => editableSettings.Dns" class="text-danger" />
+							<div class="form-text">DNS server IP addresses, separated by semicolons</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
+		
+		<div class="mt-4">
+			<div class="d-flex gap-2">
+				<button type="submit" class="btn btn-primary" disabled="@isSaving">
+					@if (isSaving)
+					{
+						<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+					}
+					Save Settings
+				</button>
+				<button type="button" class="btn btn-secondary" @onclick="CancelChanges" disabled="@isSaving">
+					Cancel
+				</button>
+				<button type="button" class="btn btn-outline-warning" @onclick="ResetToDefaults" disabled="@isSaving">
+					Reset to Current
+				</button>
+			</div>
+		</div>
+	</EditForm>
 }
 
 
 @code {
-
-	public byte RangeLow { get; private set; }
-	public byte RangeHigh { get; private set; }
-
-	public TimeSpan LeaseTime { get; private set; }
-	public TimeSpan RenewalTime { get; private set; }
-	public TimeSpan RebindingTime { get; private set; }
-
-	public string? Subnet { get; private set; }
-	public string? Router { get; private set; }
-
-	public string[]? Dns { get; private set; }
+	private EditableSettings? editableSettings;
+	private EditableSettings? originalSettings;
+	private bool isLoading = true;
+	private bool isSaving = false;
+	private bool showSuccessMessage = false;
+	private bool showErrorMessage = false;
+	private string errorMessage = string.Empty;
 
 	protected override async Task OnInitializedAsync()
 	{
-		RangeLow = await GetSettingsValue<byte>(SettingsConstants.DHCP_RANGE_LOW);
-		RangeHigh = await GetSettingsValue<byte>(SettingsConstants.DHCP_RANGE_HIGH);
-		LeaseTime = await GetSettingsValue<TimeSpan>(SettingsConstants.DHCP_LEASE_TIME);
-		RenewalTime = await GetSettingsValue<TimeSpan>(SettingsConstants.DHCP_LEASE_RENEWAL);
-		RebindingTime = await GetSettingsValue<TimeSpan>(SettingsConstants.DHCP_LEASE_REBINDING);
-		Subnet = await GetSettingsValue<string>(SettingsConstants.DHCP_LEASE_SUBNET);
-		Router = await GetSettingsValue<string>(SettingsConstants.DHCP_LEASE_ROUTER);
-		Dns = await GetSettingsValue<string[]>(SettingsConstants.DHCP_LEASE_DNS);
-
-		await base.OnInitializedAsync();
+		await LoadSettings();
 	}
 
+	private async Task LoadSettings()
+	{
+		isLoading = true;
+		StateHasChanged();
 
+		try
+		{
+			var rangeLow = await GetSettingsValue<byte>(SettingsConstants.DHCP_RANGE_LOW);
+			var rangeHigh = await GetSettingsValue<byte>(SettingsConstants.DHCP_RANGE_HIGH);
+			var leaseTime = await GetSettingsValue<TimeSpan>(SettingsConstants.DHCP_LEASE_TIME);
+			var renewalTime = await GetSettingsValue<TimeSpan>(SettingsConstants.DHCP_LEASE_RENEWAL);
+			var rebindingTime = await GetSettingsValue<TimeSpan>(SettingsConstants.DHCP_LEASE_REBINDING);
+			var subnet = await GetSettingsValue<string>(SettingsConstants.DHCP_LEASE_SUBNET);
+			var router = await GetSettingsValue<string>(SettingsConstants.DHCP_LEASE_ROUTER);
+			var dns = await GetSettingsValue<string[]>(SettingsConstants.DHCP_LEASE_DNS);
+
+			editableSettings = new EditableSettings
+			{
+				RangeLow = rangeLow,
+				RangeHigh = rangeHigh,
+				LeaseTime = FormatTimeSpan(leaseTime),
+				RenewalTime = FormatTimeSpan(renewalTime),
+				RebindingTime = FormatTimeSpan(rebindingTime),
+				Subnet = subnet ?? string.Empty,
+				Router = router ?? string.Empty,
+				Dns = dns != null ? string.Join(";", dns) : string.Empty
+			};
+
+			// Keep a copy of the original settings for cancel functionality
+			originalSettings = new EditableSettings
+			{
+				RangeLow = editableSettings.RangeLow,
+				RangeHigh = editableSettings.RangeHigh,
+				LeaseTime = editableSettings.LeaseTime,
+				RenewalTime = editableSettings.RenewalTime,
+				RebindingTime = editableSettings.RebindingTime,
+				Subnet = editableSettings.Subnet,
+				Router = editableSettings.Router,
+				Dns = editableSettings.Dns
+			};
+		}
+		catch (Exception ex)
+		{
+			errorMessage = $"Failed to load settings: {ex.Message}";
+			showErrorMessage = true;
+		}
+		finally
+		{
+			isLoading = false;
+			StateHasChanged();
+		}
+	}
+
+	private async Task SaveSettings()
+	{
+		if (editableSettings == null) return;
+
+		isSaving = true;
+		showSuccessMessage = false;
+		showErrorMessage = false;
+		StateHasChanged();
+
+		try
+		{
+			// Validate range consistency
+			if (editableSettings.RangeLow >= editableSettings.RangeHigh)
+			{
+				errorMessage = "Range Low must be less than Range High";
+				showErrorMessage = true;
+				return;
+			}
+
+			// Validate and save each setting
+			var validationTasks = new[]
+			{
+				(SettingsConstants.DHCP_RANGE_LOW, editableSettings.RangeLow.ToString()),
+				(SettingsConstants.DHCP_RANGE_HIGH, editableSettings.RangeHigh.ToString()),
+				(SettingsConstants.DHCP_LEASE_TIME, editableSettings.LeaseTime),
+				(SettingsConstants.DHCP_LEASE_RENEWAL, editableSettings.RenewalTime),
+				(SettingsConstants.DHCP_LEASE_REBINDING, editableSettings.RebindingTime),
+				(SettingsConstants.DHCP_LEASE_SUBNET, editableSettings.Subnet),
+				(SettingsConstants.DHCP_LEASE_ROUTER, editableSettings.Router),
+				(SettingsConstants.DHCP_LEASE_DNS, editableSettings.Dns)
+			};
+
+			// Validate all settings first
+			foreach (var (key, value) in validationTasks)
+			{
+				if (!await SettingsService.ValidateSettingAsync(key, value))
+				{
+					errorMessage = $"Invalid value for {GetDisplayName(key)}: {value}";
+					showErrorMessage = true;
+					return;
+				}
+			}
+
+			// Save all settings
+			foreach (var (key, value) in validationTasks)
+			{
+				await SettingsService.SetSettingAsync(key, value);
+			}
+
+			// Update original settings to match current
+			originalSettings = new EditableSettings
+			{
+				RangeLow = editableSettings.RangeLow,
+				RangeHigh = editableSettings.RangeHigh,
+				LeaseTime = editableSettings.LeaseTime,
+				RenewalTime = editableSettings.RenewalTime,
+				RebindingTime = editableSettings.RebindingTime,
+				Subnet = editableSettings.Subnet,
+				Router = editableSettings.Router,
+				Dns = editableSettings.Dns
+			};
+
+			editableSettings.IsModified = false;
+			showSuccessMessage = true;
+		}
+		catch (Exception ex)
+		{
+			errorMessage = $"Failed to save settings: {ex.Message}";
+			showErrorMessage = true;
+		}
+		finally
+		{
+			isSaving = false;
+			StateHasChanged();
+		}
+	}
+
+	private void CancelChanges()
+	{
+		if (originalSettings != null && editableSettings != null)
+		{
+			editableSettings.RangeLow = originalSettings.RangeLow;
+			editableSettings.RangeHigh = originalSettings.RangeHigh;
+			editableSettings.LeaseTime = originalSettings.LeaseTime;
+			editableSettings.RenewalTime = originalSettings.RenewalTime;
+			editableSettings.RebindingTime = originalSettings.RebindingTime;
+			editableSettings.Subnet = originalSettings.Subnet;
+			editableSettings.Router = originalSettings.Router;
+			editableSettings.Dns = originalSettings.Dns;
+			editableSettings.IsModified = false;
+		}
+		
+		showSuccessMessage = false;
+		showErrorMessage = false;
+		StateHasChanged();
+	}
+
+	private async Task ResetToDefaults()
+	{
+		await LoadSettings();
+		showSuccessMessage = false;
+		showErrorMessage = false;
+	}
 
 	private async Task<TResult> GetSettingsValue<TResult>(string key)
 	{
@@ -67,4 +334,22 @@
 			.GetGrain<ISettingsGrain>(key)
 			.GetValue<TResult>();
 	}
+
+	private static string FormatTimeSpan(TimeSpan timeSpan)
+	{
+		return $"{timeSpan.Hours:00}:{timeSpan.Minutes:00}:{timeSpan.Seconds:00}";
+	}
+
+	private static string GetDisplayName(string key) => key switch
+	{
+		SettingsConstants.DHCP_RANGE_LOW => "Range Low",
+		SettingsConstants.DHCP_RANGE_HIGH => "Range High",
+		SettingsConstants.DHCP_LEASE_TIME => "Lease Time",
+		SettingsConstants.DHCP_LEASE_RENEWAL => "Renewal Time",
+		SettingsConstants.DHCP_LEASE_REBINDING => "Rebinding Time",
+		SettingsConstants.DHCP_LEASE_SUBNET => "Subnet",
+		SettingsConstants.DHCP_LEASE_ROUTER => "Router",
+		SettingsConstants.DHCP_LEASE_DNS => "DNS Servers",
+		_ => key
+	};
 }
