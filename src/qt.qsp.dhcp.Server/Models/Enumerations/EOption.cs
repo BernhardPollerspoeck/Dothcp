@@ -52,6 +52,16 @@ public enum EOption : byte
 	/// </summary>
 	NtpServers = 42,
 
+	/// <summary>
+	/// 8.4. Vendor Specific Information
+	/// </summary>
+	VendorSpecificInfo = 43,
+
+	/// <summary>
+	/// 8.5. NetBIOS over TCP/IP Name Server Option
+	/// </summary>
+	NetBiosNameServer = 44,
+
 	AdressRequest = 50,
 
 	/// <summary>
@@ -88,6 +98,35 @@ public enum EOption : byte
 
 	ClassId = 60,
 	ClientId = 61,
+
+	/// <summary>
+	/// 8.7. NetBIOS over TCP/IP Node Type Option
+	/// </summary>
+	NetBiosNodeType = 46,
+
+	/// <summary>
+	/// 8.8. NetBIOS over TCP/IP Scope Option
+	/// </summary>
+	NetBiosScope = 47,
+
+	/// <summary>
+	/// 9.13. Relay Agent Information
+	/// RFC 3046
+	/// </summary>
+	RelayAgentInfo = 82,
+
+	/// <summary>
+	/// DNS Search List
+	/// RFC 3397
+	/// </summary>
+	DnsSearchList = 119,
+
+	/// <summary>
+	/// Classless Static Route
+	/// RFC 3442
+	/// </summary>
+	ClasslessStaticRoute = 121,
+
 	Unassigned = 110,
 
 
