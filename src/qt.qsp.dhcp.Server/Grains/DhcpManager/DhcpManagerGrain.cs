@@ -44,7 +44,7 @@ public class DhcpManagerGrain(
 		var ipRange = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_IP_RANGE);
 		
 		// Use the injected LeaseGrainSearchService to find a lease by MAC
-		var existingLease = await leaseGrainSearchService.FindLeaseByMac(this.GrainFactory, macAddress, ipRange);
+		var existingLease = await leaseGrainSearchService.FindLeaseByMac(GrainFactory, macAddress, ipRange);
 		
 		if (existingLease != null && !existingLease.IsExpired())
 		{
@@ -157,7 +157,7 @@ public class DhcpManagerGrain(
 		var subnetMask = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
 		
 		// Calculate the network address
-		string networkAddress = networkUtilityService.CalculateNetworkAddress(ipRange, subnetMask);
+		var networkAddress = networkUtilityService.CalculateNetworkAddress(ipRange, subnetMask);
 		
 		// Check if the requested IP is in the correct subnet
 		if (!networkUtilityService.IsIpInRange(requestedIp, networkAddress, subnetMask))
@@ -166,14 +166,14 @@ public class DhcpManagerGrain(
 		}
 		
 		// Check if the address is a reserved address (network or broadcast)
-		string broadcastAddress = networkUtilityService.CalculateBroadcastAddress(ipRange, subnetMask);
+		var broadcastAddress = networkUtilityService.CalculateBroadcastAddress(ipRange, subnetMask);
 		if (networkUtilityService.IsReservedIp(requestedIp, networkAddress, broadcastAddress))
 		{
 			return CreateNakMessage(message, $"Requested IP {requestedIp} is a reserved address (network or broadcast)");
 		}
 		
 		// Check if the address is available or already offered to this client
-		var ipAddressGrain = this.GrainFactory.GetGrain<IIpAddressInformationGrain>(requestedIp);
+		var ipAddressGrain = GrainFactory.GetGrain<IIpAddressInformationGrain>(requestedIp);
 		var ipStatus = await ipAddressGrain.GetStatus();
 		
 		if (ipStatus.Status == EIpAddressStatus.Available)
@@ -210,7 +210,7 @@ public class DhcpManagerGrain(
 		var leaseDuration = await settingsLoader.GetSetting<TimeSpan>(SettingsConstants.DHCP_LEASE_TIME);
 		
 		// Create or update lease in the lease grain directly
-		var leaseGrain = this.GrainFactory.GetGrain<IDhcpLeaseGrain>(requestedIp);
+		var leaseGrain = GrainFactory.GetGrain<IDhcpLeaseGrain>(requestedIp);
 		var macAddress = BitConverter.ToString(message.ClientHardwareAdress).Replace("-", ":");
 		var lease = new DhcpLease
 		{

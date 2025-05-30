@@ -47,16 +47,16 @@ public class OfferGeneratorService(
 		// Check if the client has requested a specific IP
 		if (message.RequestedIpAddress != null && !string.IsNullOrEmpty(message.RequestedIpAddress.ToString()))
 		{
-			string requestedIp = message.RequestedIpAddress.ToString();
+			var requestedIp = message.RequestedIpAddress.ToString();
 			
 			// Get the subnet mask and router settings
-			string subnetMask = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
+			var subnetMask = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
 			var routerBytes = await settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER);
-			string routerIp = string.Join('.', routerBytes);
+			var routerIp = string.Join('.', routerBytes);
 			
 			// Calculate the network and broadcast addresses
-			string networkAddress = networkUtilityService.CalculateNetworkAddress(routerIp, subnetMask);
-			string broadcastAddress = networkUtilityService.CalculateBroadcastAddress(routerIp, subnetMask);
+			var networkAddress = networkUtilityService.CalculateNetworkAddress(routerIp, subnetMask);
+			var broadcastAddress = networkUtilityService.CalculateBroadcastAddress(routerIp, subnetMask);
 			
 			// Check if the requested IP is valid and within range
 			if (!networkUtilityService.IsIpInRange(requestedIp, networkAddress, subnetMask) || 
@@ -67,7 +67,7 @@ public class OfferGeneratorService(
 			}
 			
 			// Check if the requested IP is already in use on the network
-			bool isInUse = await networkUtilityService.IsIpInUseAsync(requestedIp);
+			var isInUse = await networkUtilityService.IsIpInUseAsync(requestedIp);
 			if (isInUse)
 			{
 				logger.LogWarning("Requested IP {requestedIp} is already in use on the network", requestedIp);
@@ -107,11 +107,11 @@ public class OfferGeneratorService(
 		var routerBytes = (await settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER))[0..^1];
 		var subnetMask = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
 		
-		string routerBase = string.Join('.', routerBytes);
+		var routerBase = string.Join('.', routerBytes);
 		
 		// Calculate network and broadcast addresses
-		string networkAddress = networkUtilityService.CalculateNetworkAddress($"{routerBase}.0", subnetMask);
-		string broadcastAddress = networkUtilityService.CalculateBroadcastAddress($"{routerBase}.0", subnetMask);
+		var networkAddress = networkUtilityService.CalculateNetworkAddress($"{routerBase}.0", subnetMask);
+		var broadcastAddress = networkUtilityService.CalculateBroadcastAddress($"{routerBase}.0", subnetMask);
 		
 		// Try to allocate IP sequentially - using a random starting point would be a future enhancement
 		for (var i = minAddress; i <= maxAddress; i++)
@@ -125,7 +125,7 @@ public class OfferGeneratorService(
 			}
 			
 			// Check if the IP is already in use on the network (ARP probe)
-			bool isInUse = await networkUtilityService.IsIpInUseAsync(ipAddress);
+			var isInUse = await networkUtilityService.IsIpInUseAsync(ipAddress);
 			if (isInUse)
 			{
 				continue;
@@ -164,11 +164,11 @@ public class OfferGeneratorService(
 		var localIp = GetLocalIpAddress();
 
 		// Get subnet mask and router settings
-		string subnetMask = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
-		string routerIp = string.Join('.', await settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER));
+		var subnetMask = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
+		var routerIp = string.Join('.', await settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER));
 		
 		// Calculate broadcast address
-		string broadcastAddress = networkUtilityService.CalculateBroadcastAddress(routerIp, subnetMask);
+		var broadcastAddress = networkUtilityService.CalculateBroadcastAddress(routerIp, subnetMask);
 
 		var optionsBuilder = new DhcpOptionsBuilder()
 			.AddAddressLeaseTime(await settingsLoader.GetSetting<TimeSpan>(SettingsConstants.DHCP_LEASE_TIME))

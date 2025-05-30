@@ -52,7 +52,7 @@ public class DhcpMessage
 			try
 			{
 				var option = Options.First(o => o.Option is EOption.AdressRequest);
-				string ipString = string.Join('.', option.Data);
+				var ipString = string.Join('.', option.Data);
 				return IPAddress.Parse(ipString);
 			}
 			catch

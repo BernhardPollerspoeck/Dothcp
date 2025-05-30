@@ -5,7 +5,7 @@ namespace qt.qsp.dhcp.Server.Tests;
 
 public class NetworkUtilitiesTests
 {
-    private readonly INetworkUtilityService _networkUtilityService;
+    private readonly NetworkUtilityService _networkUtilityService;
     
     public NetworkUtilitiesTests()
     {

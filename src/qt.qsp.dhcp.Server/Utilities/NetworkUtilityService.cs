@@ -24,15 +24,15 @@ public class NetworkUtilityService : INetworkUtilityService
         IPAddress subnet = IPAddress.Parse(subnetMask);
         
         // Get the byte arrays for the IP address and subnet mask
-        byte[] ipBytes = ipAddress.GetAddressBytes();
-        byte[] subnetBytes = subnet.GetAddressBytes();
+        var ipBytes = ipAddress.GetAddressBytes();
+        var subnetBytes = subnet.GetAddressBytes();
         
         if (ipBytes.Length != 4 || subnetBytes.Length != 4)
             throw new ArgumentException("Only IPv4 addresses are supported");
         
         // Calculate the broadcast address by applying the bitwise OR between the IP and inverted subnet mask
-        byte[] broadcastBytes = new byte[4];
-        for (int i = 0; i < 4; i++)
+        var broadcastBytes = new byte[4];
+        for (var i = 0; i < 4; i++)
         {
             broadcastBytes[i] = (byte)(ipBytes[i] | ~subnetBytes[i]);
         }
@@ -60,15 +60,15 @@ public class NetworkUtilityService : INetworkUtilityService
         IPAddress subnet = IPAddress.Parse(subnetMask);
         
         // Get the byte arrays for the IP address and subnet mask
-        byte[] ipBytes = ipAddress.GetAddressBytes();
-        byte[] subnetBytes = subnet.GetAddressBytes();
+        var ipBytes = ipAddress.GetAddressBytes();
+        var subnetBytes = subnet.GetAddressBytes();
         
         if (ipBytes.Length != 4 || subnetBytes.Length != 4)
             throw new ArgumentException("Only IPv4 addresses are supported");
         
         // Calculate the network address by applying the bitwise AND between the IP and subnet mask
-        byte[] networkBytes = new byte[4];
-        for (int i = 0; i < 4; i++)
+        var networkBytes = new byte[4];
+        for (var i = 0; i < 4; i++)
         {
             networkBytes[i] = (byte)(ipBytes[i] & subnetBytes[i]);
         }
@@ -92,7 +92,7 @@ public class NetworkUtilityService : INetworkUtilityService
         try
         {
             // Calculate the network address of the IP address
-            string ipNetworkAddress = CalculateNetworkAddress(ipAddress, subnetMask);
+            var ipNetworkAddress = CalculateNetworkAddress(ipAddress, subnetMask);
             
             // If the network address of the IP matches the provided network address, then the IP is in range
             return ipNetworkAddress == networkAddress;
@@ -137,7 +137,7 @@ public class NetworkUtilityService : INetworkUtilityService
             
         // Parse the network address
         IPAddress network = IPAddress.Parse(networkAddress);
-        byte[] ipBytes = network.GetAddressBytes();
+        var ipBytes = network.GetAddressBytes();
         
         if (ipBytes.Length != 4)
             throw new ArgumentException("Only IPv4 addresses are supported");
@@ -160,7 +160,7 @@ public class NetworkUtilityService : INetworkUtilityService
             
         // Parse the broadcast address
         IPAddress broadcast = IPAddress.Parse(broadcastAddress);
-        byte[] ipBytes = broadcast.GetAddressBytes();
+        var ipBytes = broadcast.GetAddressBytes();
         
         if (ipBytes.Length != 4)
             throw new ArgumentException("Only IPv4 addresses are supported");
@@ -185,7 +185,7 @@ public class NetworkUtilityService : INetworkUtilityService
         try
         {
             // Use ping to check if the IP is in use
-            using Ping ping = new Ping();
+            using Ping ping = new();
             PingReply reply = await ping.SendPingAsync(ipAddress, timeout);
             
             // If we get a response, the IP is in use
