@@ -106,6 +106,50 @@ public class DhcpOptionsBuilder
 		});
 		return this;
 	}
+	public DhcpOptionsBuilder AddVendorSpecificInfo(byte[] vendorInfo)
+	{
+		_options.Add(new()
+		{
+			Option = EOption.VendorSpecificInfo,
+			Data = vendorInfo,
+		});
+		return this;
+	}
+
+	public DhcpOptionsBuilder AddNetBiosNameServers(string[] nameServers)
+	{
+		if (nameServers.Length < 1)
+		{
+			return this;
+		}
+		_options.Add(new()
+		{
+			Option = EOption.NetBiosNameServer,
+			Data = nameServers.Select(o => IPAddress.Parse(o).GetAddressBytes()).SelectMany(o => o).ToArray(),
+		});
+		return this;
+	}
+
+	public DhcpOptionsBuilder AddNetBiosNodeType(byte nodeType)
+	{
+		_options.Add(new()
+		{
+			Option = EOption.NetBiosNodeType,
+			Data = [nodeType],
+		});
+		return this;
+	}
+
+	public DhcpOptionsBuilder AddNetBiosScope(string scope)
+	{
+		_options.Add(new()
+		{
+			Option = EOption.NetBiosScope,
+			Data = Encoding.ASCII.GetBytes(scope),
+		});
+		return this;
+	}
+
 	public DhcpOptionsBuilder AddNtpServerOptions(string[] ntpServers)
 	{
 		if (ntpServers.Length < 1)
@@ -156,6 +200,69 @@ public class DhcpOptionsBuilder
 		{
 			Option = EOption.DomainName,
 			Data = Encoding.UTF8.GetBytes(domainName),
+		});
+		return this;
+	}
+
+	public DhcpOptionsBuilder AddRelayAgentInfo(byte[] relayInfo)
+	{
+		_options.Add(new()
+		{
+			Option = EOption.RelayAgentInfo,
+			Data = relayInfo,
+		});
+		return this;
+	}
+
+	public DhcpOptionsBuilder AddDnsSearchList(string[] searchDomains)
+	{
+		if (searchDomains.Length < 1)
+		{
+			return this;
+		}
+
+		// Simplified DNS name encoding - each domain is encoded as a series of length-prefixed labels
+		var data = new List<byte>();
+		
+		foreach (var domain in searchDomains)
+		{
+			var labels = domain.Split('.');
+			foreach (var label in labels)
+			{
+				data.Add((byte)label.Length);
+				data.AddRange(Encoding.ASCII.GetBytes(label));
+			}
+			data.Add(0); // Null terminator for the domain
+		}
+		
+		_options.Add(new()
+		{
+			Option = EOption.DnsSearchList,
+			Data = data.ToArray(),
+		});
+		return this;
+	}
+
+	public DhcpOptionsBuilder AddClasslessStaticRoutes(Dictionary<(byte prefixLength, byte[] networkPrefix), IPAddress> routes)
+	{
+		if (routes.Count < 1)
+		{
+			return this;
+		}
+
+		var data = new List<byte>();
+		
+		foreach (var route in routes)
+		{
+			data.Add(route.Key.prefixLength);  // Prefix length
+			data.AddRange(route.Key.networkPrefix);  // Network prefix
+			data.AddRange(route.Value.GetAddressBytes());  // Router address
+		}
+		
+		_options.Add(new()
+		{
+			Option = EOption.ClasslessStaticRoute,
+			Data = data.ToArray(),
 		});
 		return this;
 	}

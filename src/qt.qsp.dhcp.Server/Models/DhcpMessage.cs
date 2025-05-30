@@ -1,4 +1,5 @@
 ﻿using System.Net;
+using System.Text;
 using qt.qsp.dhcp.Server.Models.Enumerations;
 
 namespace qt.qsp.dhcp.Server.Models;
@@ -92,12 +93,196 @@ public class DhcpMessage
 		return System.Text.Encoding.ASCII.GetString(option.Data);
 	}
 	
+	public string? GetDomainName()
+	{
+		var option = Options
+			.FirstOrDefault(o => o.Option is EOption.DomainName);
+		if (option == null) return null;
+		return System.Text.Encoding.ASCII.GetString(option.Data);
+	}
+	
 	public IEnumerable<byte> GetParameterList()
 	{
 		return Options
 			.FirstOrDefault(o => o.Option is EOption.ParameterList)
 			?.Data 
 			?? [];
+	}
+
+	public IPAddress[]? GetNtpServers()
+	{
+		var option = Options
+			.FirstOrDefault(o => o.Option is EOption.NtpServers);
+		if (option == null) return null;
+
+		try
+		{
+			var ipCount = option.Data.Length / 4;
+			var result = new IPAddress[ipCount];
+
+			for (var i = 0; i < ipCount; i++)
+			{
+				result[i] = new IPAddress(option.Data.Skip(i * 4).Take(4).ToArray());
+			}
+			return result;
+		}
+		catch
+		{
+			return null;
+		}
+	}
+
+	public IPAddress[]? GetNetBiosNameServers()
+	{
+		var option = Options
+			.FirstOrDefault(o => o.Option is EOption.NetBiosNameServer);
+		if (option == null) return null;
+
+		try
+		{
+			var ipCount = option.Data.Length / 4;
+			var result = new IPAddress[ipCount];
+
+			for (var i = 0; i < ipCount; i++)
+			{
+				result[i] = new IPAddress(option.Data.Skip(i * 4).Take(4).ToArray());
+			}
+			return result;
+		}
+		catch
+		{
+			return null;
+		}
+	}
+
+	public byte? GetNetBiosNodeType()
+	{
+		var option = Options
+			.FirstOrDefault(o => o.Option is EOption.NetBiosNodeType);
+		if (option == null || option.Data.Length < 1) return null;
+		return option.Data[0];
+	}
+
+	public string? GetNetBiosScope()
+	{
+		var option = Options
+			.FirstOrDefault(o => o.Option is EOption.NetBiosScope);
+		if (option == null) return null;
+		return System.Text.Encoding.ASCII.GetString(option.Data);
+	}
+
+	public byte[]? GetRelayAgentInfo()
+	{
+		var option = Options
+			.FirstOrDefault(o => o.Option is EOption.RelayAgentInfo);
+		if (option == null) return null;
+		return option.Data;
+	}
+
+	public byte[]? GetVendorSpecificInfo()
+	{
+		var option = Options
+			.FirstOrDefault(o => o.Option is EOption.VendorSpecificInfo);
+		if (option == null) return null;
+		return option.Data;
+	}
+
+	public Dictionary<(byte prefixLength, byte[] networkPrefix), IPAddress>? GetClasslessStaticRoutes()
+	{
+		var option = Options
+			.FirstOrDefault(o => o.Option is EOption.ClasslessStaticRoute);
+		if (option == null) return null;
+
+		try
+		{
+			var routes = new Dictionary<(byte prefixLength, byte[] networkPrefix), IPAddress>();
+			var index = 0;
+
+			while (index < option.Data.Length)
+			{
+				// Get the prefix length
+				byte prefixLength = option.Data[index++];
+				
+				// Calculate the number of bytes needed to represent the network prefix
+				int networkPrefixBytes = (int)Math.Ceiling(prefixLength / 8.0);
+				
+				// Extract the network prefix
+				var networkPrefix = new byte[networkPrefixBytes];
+				Array.Copy(option.Data, index, networkPrefix, 0, networkPrefixBytes);
+				index += networkPrefixBytes;
+				
+				// Extract the router address (always 4 bytes)
+				var routerBytes = new byte[4];
+				if (index + 3 < option.Data.Length)
+				{
+					Array.Copy(option.Data, index, routerBytes, 0, 4);
+					index += 4;
+					
+					var routerAddress = new IPAddress(routerBytes);
+					routes.Add((prefixLength, networkPrefix), routerAddress);
+				}
+				else
+				{
+					// Malformed option data
+					break;
+				}
+			}
+			
+			return routes;
+		}
+		catch
+		{
+			return null;
+		}
+	}
+
+	public string[]? GetDnsSearchList()
+	{
+		var option = Options
+			.FirstOrDefault(o => o.Option is EOption.DnsSearchList);
+		if (option == null) return null;
+
+		try
+		{
+			// Simplified approach to parse DNS search list
+			var result = new List<string>();
+			int position = 0;
+			
+			while (position < option.Data.Length)
+			{
+				var domainParts = new List<string>();
+				
+				while (position < option.Data.Length && option.Data[position] != 0)
+				{
+					int labelLength = option.Data[position++];
+					
+					if (position + labelLength <= option.Data.Length)
+					{
+						var labelBytes = new byte[labelLength];
+						Array.Copy(option.Data, position, labelBytes, 0, labelLength);
+						domainParts.Add(Encoding.ASCII.GetString(labelBytes));
+						position += labelLength;
+					}
+				}
+				
+				if (domainParts.Count > 0)
+				{
+					result.Add(string.Join(".", domainParts));
+				}
+				
+				// Skip the terminating zero
+				if (position < option.Data.Length && option.Data[position] == 0)
+				{
+					position++;
+				}
+			}
+			
+			return result.ToArray();
+		}
+		catch
+		{
+			return null;
+		}
 	}
 
 	public IEnumerable<byte> ToData()
