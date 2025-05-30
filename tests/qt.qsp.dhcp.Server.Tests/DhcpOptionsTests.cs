@@ -111,6 +111,39 @@ public class DhcpOptionsTests
     }
     
     [Fact]
+    public void BuildAndParseNetBiosScope_ShouldMatch()
+    {
+        // Arrange
+        var scope = "WORKGROUP";
+        
+        // Act
+        var builder = new DhcpOptionsBuilder();
+        var options = builder.AddNetBiosScope(scope).Build();
+        
+        // Create a message with these options
+        var message = new DhcpMessage
+        {
+            Direction = EMessageDirection.Request,
+            HardwareType = EHardwareType.Ethernet,
+            ClientIdLength = 6,
+            Hops = 0,
+            TransactionId = 12345,
+            ResponseCastType = EResponseCastType.Broadcast,
+            ClientIpAdress = 0,
+            AssigneeAdress = 0,
+            ServerIpAdress = 0,
+            ClientHardwareAdress = new byte[16],
+            Options = options
+        };
+        
+        var retrievedScope = message.GetNetBiosScope();
+        
+        // Assert
+        Assert.NotNull(retrievedScope);
+        Assert.Equal(scope, retrievedScope);
+    }
+    
+    [Fact]
     public void BuildAndParseVendorSpecificInfo_ShouldMatch()
     {
         // Arrange
@@ -148,6 +181,146 @@ public class DhcpOptionsTests
     }
     
     [Fact]
+    public void BuildAndParseNtpServers_ShouldMatch()
+    {
+        // Arrange
+        var ntpServers = new[] { "132.163.96.1", "132.163.97.1" };
+        
+        // Act
+        var builder = new DhcpOptionsBuilder();
+        var options = builder.AddNtpServerOptions(ntpServers).Build();
+        
+        // Create a message with these options
+        var message = new DhcpMessage
+        {
+            Direction = EMessageDirection.Request,
+            HardwareType = EHardwareType.Ethernet,
+            ClientIdLength = 6,
+            Hops = 0,
+            TransactionId = 12345,
+            ResponseCastType = EResponseCastType.Broadcast,
+            ClientIpAdress = 0,
+            AssigneeAdress = 0,
+            ServerIpAdress = 0,
+            ClientHardwareAdress = new byte[16],
+            Options = options
+        };
+        
+        var retrievedServers = message.GetNtpServers();
+        
+        // Assert
+        Assert.NotNull(retrievedServers);
+        Assert.Equal(ntpServers.Length, retrievedServers.Length);
+        Assert.Equal(IPAddress.Parse(ntpServers[0]), retrievedServers[0]);
+        Assert.Equal(IPAddress.Parse(ntpServers[1]), retrievedServers[1]);
+    }
+    
+    [Fact]
+    public void BuildAndParseRelayAgentInfo_ShouldMatch()
+    {
+        // Arrange
+        var relayInfo = new byte[] { 0x01, 0x06, 0x00, 0x04, 0xAC, 0x11, 0x00, 0x01 };
+        
+        // Act
+        var builder = new DhcpOptionsBuilder();
+        var options = builder.AddRelayAgentInfo(relayInfo).Build();
+        
+        // Create a message with these options
+        var message = new DhcpMessage
+        {
+            Direction = EMessageDirection.Request,
+            HardwareType = EHardwareType.Ethernet,
+            ClientIdLength = 6,
+            Hops = 0,
+            TransactionId = 12345,
+            ResponseCastType = EResponseCastType.Broadcast,
+            ClientIpAdress = 0,
+            AssigneeAdress = 0,
+            ServerIpAdress = 0,
+            ClientHardwareAdress = new byte[16],
+            Options = options
+        };
+        
+        var retrievedInfo = message.GetRelayAgentInfo();
+        
+        // Assert
+        Assert.NotNull(retrievedInfo);
+        Assert.Equal(relayInfo.Length, retrievedInfo.Length);
+        for (int i = 0; i < relayInfo.Length; i++)
+        {
+            Assert.Equal(relayInfo[i], retrievedInfo[i]);
+        }
+    }
+    
+    [Fact]
+    public void BuildAndParseClasslessStaticRoutes_ShouldMatch()
+    {
+        // Arrange
+        var routes = new Dictionary<(byte prefixLength, byte[] networkPrefix), IPAddress>
+        {
+            { (24, new byte[] { 10, 0, 0 }), IPAddress.Parse("192.168.1.1") },
+            { (16, new byte[] { 192, 168 }), IPAddress.Parse("10.0.0.1") }
+        };
+        
+        // Act
+        var builder = new DhcpOptionsBuilder();
+        var options = builder.AddClasslessStaticRoutes(routes).Build();
+        
+        // Create a message with these options
+        var message = new DhcpMessage
+        {
+            Direction = EMessageDirection.Request,
+            HardwareType = EHardwareType.Ethernet,
+            ClientIdLength = 6,
+            Hops = 0,
+            TransactionId = 12345,
+            ResponseCastType = EResponseCastType.Broadcast,
+            ClientIpAdress = 0,
+            AssigneeAdress = 0,
+            ServerIpAdress = 0,
+            ClientHardwareAdress = new byte[16],
+            Options = options
+        };
+        
+        var retrievedRoutes = message.GetClasslessStaticRoutes();
+        
+        // Assert
+        Assert.NotNull(retrievedRoutes);
+        Assert.Equal(routes.Count, retrievedRoutes.Count);
+        
+        // Verify routes match
+        foreach (var route in routes)
+        {
+            bool foundMatch = false;
+            foreach (var retrievedRoute in retrievedRoutes)
+            {
+                if (route.Key.prefixLength == retrievedRoute.Key.prefixLength &&
+                    route.Value.Equals(retrievedRoute.Value))
+                {
+                    // Compare network prefix bytes
+                    bool prefixMatches = true;
+                    for (int i = 0; i < route.Key.networkPrefix.Length; i++)
+                    {
+                        if (route.Key.networkPrefix[i] != retrievedRoute.Key.networkPrefix[i])
+                        {
+                            prefixMatches = false;
+                            break;
+                        }
+                    }
+                    
+                    if (prefixMatches)
+                    {
+                        foundMatch = true;
+                        break;
+                    }
+                }
+            }
+            
+            Assert.True(foundMatch, "Could not find matching static route in retrieved routes");
+        }
+    }
+    
+    [Fact]
     public void BuildAndParseDnsSearchList_ShouldMatchSimpleDomains()
     {
         // Arrange
@@ -176,9 +349,51 @@ public class DhcpOptionsTests
         var retrievedDomains = message.GetDnsSearchList();
         
         // Assert
-        // Note: This test may be brittle due to DNS name compression complexities
-        // We're testing a simplified implementation that works with basic domains
         Assert.NotNull(retrievedDomains);
         Assert.Equal(searchDomains.Length, retrievedDomains.Length);
+        Assert.Contains("example.com", retrievedDomains);
+        Assert.Contains("test.local", retrievedDomains);
+    }
+    
+    [Fact]
+    public void BuildAndParseDnsSearchList_WithCompressionPointers_ShouldMatch()
+    {
+        // Arrange
+        var searchDomains = new[] { "example.com", "test.example.com", "sub.test.example.com" };
+        
+        // Act
+        var builder = new DhcpOptionsBuilder();
+        var options = builder.AddDnsSearchList(searchDomains).Build();
+        
+        // Create a message with these options
+        var message = new DhcpMessage
+        {
+            Direction = EMessageDirection.Request,
+            HardwareType = EHardwareType.Ethernet,
+            ClientIdLength = 6,
+            Hops = 0,
+            TransactionId = 12345,
+            ResponseCastType = EResponseCastType.Broadcast,
+            ClientIpAdress = 0,
+            AssigneeAdress = 0,
+            ServerIpAdress = 0,
+            ClientHardwareAdress = new byte[16],
+            Options = options
+        };
+        
+        var retrievedDomains = message.GetDnsSearchList();
+        
+        // Assert
+        Assert.NotNull(retrievedDomains);
+        Assert.Equal(searchDomains.Length, retrievedDomains.Length);
+        
+        // Sort both arrays for comparison since order may not be preserved due to compression
+        Array.Sort(searchDomains);
+        var sortedRetrieved = retrievedDomains.OrderBy(d => d).ToArray();
+        
+        for (int i = 0; i < searchDomains.Length; i++)
+        {
+            Assert.Equal(searchDomains[i], sortedRetrieved[i]);
+        }
     }
 }
