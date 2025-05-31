@@ -1,0 +1,81 @@
+@using qt.qsp.dhcp.Server.Services
+@inject IDashboardService DashboardService
+@implements IDisposable
+
+<div class="nav-item px-3">
+    <div class="nav-link">
+        <span class="@GetStatusIconClass()" aria-hidden="true"></span>
+        <span class="text-@GetStatusTextClass()">
+            @GetStatusText()
+        </span>
+    </div>
+</div>
+
+@code {
+    private ServerState serverState = ServerState.Stopped;
+    private Timer? refreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshServerStatus();
+        
+        // Set up auto-refresh every 10 seconds
+        refreshTimer = new Timer(async _ => await RefreshServerStatus(), null, TimeSpan.Zero, TimeSpan.FromSeconds(10));
+    }
+
+    private async Task RefreshServerStatus()
+    {
+        try
+        {
+            var dashboardData = await DashboardService.GetDashboardDataAsync();
+            if (dashboardData?.ServerStatus != null)
+            {
+                var newState = dashboardData.ServerStatus.State;
+                if (newState != serverState)
+                {
+                    serverState = newState;
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // Silently handle errors in auto-refresh
+            var errorState = ServerState.Error;
+            if (errorState != serverState)
+            {
+                serverState = errorState;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private string GetStatusIconClass() => serverState switch
+    {
+        ServerState.Running => "bi bi-play-circle-fill text-success",
+        ServerState.Stopped => "bi bi-stop-circle-fill text-secondary",
+        ServerState.Error => "bi bi-exclamation-triangle-fill text-danger",
+        _ => "bi bi-question-circle-fill text-muted"
+    };
+
+    private string GetStatusTextClass() => serverState switch
+    {
+        ServerState.Running => "success",
+        ServerState.Stopped => "secondary",
+        ServerState.Error => "danger",
+        _ => "muted"
+    };
+
+    private string GetStatusText() => serverState switch
+    {
+        ServerState.Running => "Running",
+        ServerState.Stopped => "Stopped",
+        ServerState.Error => "Error",
+        _ => "Unknown"
+    };
+
+    public void Dispose()
+    {
+        refreshTimer?.Dispose();
+    }
+}

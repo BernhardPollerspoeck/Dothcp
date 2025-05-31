@@ -15,6 +15,7 @@ public class DashboardService : IDashboardService
     private readonly ILogger<DashboardService> _logger;
     private readonly ISettingsLoaderService _settingsLoader;
     private readonly INetworkUtilityService _networkUtility;
+    private readonly IDhcpServerService _dhcpServerService;
     private static readonly DateTime _serverStartTime = DateTime.UtcNow;
 
     public DashboardService(
@@ -22,13 +23,15 @@ public class DashboardService : IDashboardService
         ILeaseGrainSearchService leaseSearchService,
         ILogger<DashboardService> logger,
         ISettingsLoaderService settingsLoader,
-        INetworkUtilityService networkUtility)
+        INetworkUtilityService networkUtility,
+        IDhcpServerService dhcpServerService)
     {
         _grainFactory = grainFactory;
         _leaseSearchService = leaseSearchService;
         _logger = logger;
         _settingsLoader = settingsLoader;
         _networkUtility = networkUtility;
+        _dhcpServerService = dhcpServerService;
     }
 
     public async Task<DashboardData> GetDashboardDataAsync()
@@ -104,7 +107,7 @@ public class DashboardService : IDashboardService
         var serverStatus = new ServerStatus
         {
             Uptime = uptime,
-            State = ServerState.Running, // For now, if we're executing, we're running
+            State = _dhcpServerService.CurrentState,
             NetworkInterfaces = networkInterfaces
         };
 

@@ -60,4 +60,10 @@ public interface INetworkUtilityService
     /// <param name="timeout">Timeout for the ARP probe in milliseconds</param>
     /// <returns>True if the IP is in use, false otherwise</returns>
     Task<bool> IsIpInUseAsync(string ipAddress, int timeout = 200);
+    
+    /// <summary>
+    /// Gets available network interfaces with their IP addresses
+    /// </summary>
+    /// <returns>Dictionary with interface name as key and IP address as value</returns>
+    Dictionary<string, string> GetAvailableNetworkInterfaces();
 }
