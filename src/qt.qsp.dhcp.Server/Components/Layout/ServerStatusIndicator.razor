@@ -20,36 +20,51 @@
 
     protected override async Task OnInitializedAsync()
     {
-        // Check if system is configured before starting status monitoring
+        // Subscribe to state changes for immediate updates
+        DhcpServerService.StateChanged += OnServerStateChanged;
+        
+        // Check configuration status and initialize
+        await RefreshConfigurationStatus();
+        
+        // Set up auto-refresh every 10 seconds
+        refreshTimer = new Timer(async _ => await RefreshServerStatus(), null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
+    }
+
+    private async Task RefreshConfigurationStatus()
+    {
         try
         {
+            var wasConfigured = isConfigured;
             isConfigured = !await FirstRunService.IsFirstRunAsync();
+            
+            // If configuration status changed, update server state
+            if (wasConfigured != isConfigured)
+            {
+                if (isConfigured)
+                {
+                    // System is now configured, get current server state
+                    serverState = DhcpServerService.CurrentState;
+                }
+                else
+                {
+                    // System is not configured
+                    serverState = ServerState.Stopped;
+                }
+                await InvokeAsync(StateHasChanged);
+            }
         }
         catch
         {
             isConfigured = false;
-        }
-
-        if (isConfigured)
-        {
-            // Subscribe to state changes for immediate updates
-            DhcpServerService.StateChanged += OnServerStateChanged;
-            
-            // Initialize current state
-            serverState = DhcpServerService.CurrentState;
-            
-            // Set up auto-refresh every 10 seconds as backup
-            refreshTimer = new Timer(async _ => await RefreshServerStatus(), null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
-        }
-        else
-        {
-            // Set appropriate state for unconfigured system
             serverState = ServerState.Stopped;
         }
     }
 
     private async Task RefreshServerStatus()
     {
+        // Always check configuration status first
+        await RefreshConfigurationStatus();
+        
         // Don't attempt to refresh if system is not configured
         if (!isConfigured)
         {

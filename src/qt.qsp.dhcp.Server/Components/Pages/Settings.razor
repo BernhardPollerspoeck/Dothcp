@@ -202,8 +202,9 @@ else if (editableSettings != null)
 
 	protected override async Task OnInitializedAsync()
 	{
-		await LoadSettings();
 		LoadNetworkInterfaces();
+		await LoadSettings();
+		DetermineSelectedNetworkInterface();
 	}
 
 	private void LoadNetworkInterfaces()
@@ -217,6 +218,43 @@ else if (editableSettings != null)
 			Console.WriteLine($"Error loading network interfaces: {ex.Message}");
 			networkInterfaces = new Dictionary<string, string>();
 		}
+	}
+
+	private void DetermineSelectedNetworkInterface()
+	{
+		// Determine the selected network interface that matches the router IP
+		if (editableSettings != null && !string.IsNullOrEmpty(editableSettings.Router) && networkInterfaces != null)
+		{
+			// Try to find the exact match first
+			var exactMatch = networkInterfaces.FirstOrDefault(kvp => kvp.Value == editableSettings.Router);
+			if (!string.IsNullOrEmpty(exactMatch.Value))
+			{
+				selectedNetworkInterface = exactMatch.Value;
+			}
+			else
+			{
+				// If no exact match, try to find an interface in the same network
+				foreach (var kvp in networkInterfaces)
+				{
+					try
+					{
+						if (!string.IsNullOrEmpty(editableSettings.Subnet) && 
+							NetworkUtilityService.IsIpInRange(editableSettings.Router, 
+								NetworkUtilityService.CalculateNetworkAddress(kvp.Value, editableSettings.Subnet), 
+								editableSettings.Subnet))
+						{
+							selectedNetworkInterface = kvp.Value;
+							break;
+						}
+					}
+					catch
+					{
+						// Continue to next interface if calculation fails
+					}
+				}
+			}
+		}
+		StateHasChanged();
 	}
 
 	private async Task LoadSettings()
@@ -246,39 +284,6 @@ else if (editableSettings != null)
 				Router = router ?? string.Empty,
 				Dns = dns != null ? string.Join(";", dns) : string.Empty
 			};
-
-			// Determine the selected network interface that matches the router IP
-			if (!string.IsNullOrEmpty(editableSettings.Router) && networkInterfaces != null)
-			{
-				// Try to find the exact match first
-				var exactMatch = networkInterfaces.FirstOrDefault(kvp => kvp.Value == editableSettings.Router);
-				if (!string.IsNullOrEmpty(exactMatch.Value))
-				{
-					selectedNetworkInterface = exactMatch.Value;
-				}
-				else
-				{
-					// If no exact match, try to find an interface in the same network
-					foreach (var kvp in networkInterfaces)
-					{
-						try
-						{
-							if (!string.IsNullOrEmpty(editableSettings.Subnet) && 
-								NetworkUtilityService.IsIpInRange(editableSettings.Router, 
-									NetworkUtilityService.CalculateNetworkAddress(kvp.Value, editableSettings.Subnet), 
-									editableSettings.Subnet))
-							{
-								selectedNetworkInterface = kvp.Value;
-								break;
-							}
-						}
-						catch
-						{
-							// Continue to next interface if calculation fails
-						}
-					}
-				}
-			}
 
 			// Keep a copy of the original settings for cancel functionality
 			originalSettings = new EditableSettings
