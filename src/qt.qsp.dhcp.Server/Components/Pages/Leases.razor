@@ -1,6 +1,7 @@
 @page "/leases"
 @using qt.qsp.dhcp.Server.Services
 @using qt.qsp.dhcp.Server.Grains.DhcpManager
+@using qt.qsp.dhcp.Server.Components.Dashboard
 @inject IDashboardService DashboardService
 @inject IJSRuntime JSRuntime
 
@@ -320,6 +321,13 @@
     }
 </div>
 
+<!-- Lease Details Modal -->
+<LeaseDetailsModal IsVisible="showLeaseModal" 
+                   Lease="selectedLease" 
+                   OnClose="CloseLeaseModal"
+                   OnRenew="RenewLease" 
+                   OnRevoke="RevokeLease" />
+
 @code {
     private List<DhcpLease>? allLeases;
     private List<DhcpLease> filteredLeases = new();
@@ -339,6 +347,10 @@
     private int currentPage = 1;
     private int pageSize = 25;
     private int totalPages = 1;
+
+    // Modal state
+    private bool showLeaseModal = false;
+    private DhcpLease? selectedLease = null;
 
     protected override async Task OnInitializedAsync()
     {
@@ -508,20 +520,32 @@
     }
 
     // Lease management methods
-    private async Task ViewLeaseDetails(DhcpLease lease)
+    private void ViewLeaseDetails(DhcpLease lease)
     {
-        // TODO: Implement lease details modal
-        await JSRuntime.InvokeVoidAsync("alert", $"Lease Details for {lease.IpAddress}\n\nMAC: {lease.MacAddress}\nHostname: {lease.HostName ?? "N/A"}\nStatus: {lease.Status}\nStart: {lease.LeaseStart}\nExpires: {lease.LeaseExpiration}");
+        selectedLease = lease;
+        showLeaseModal = true;
+    }
+
+    private void CloseLeaseModal()
+    {
+        showLeaseModal = false;
+        selectedLease = null;
     }
 
     private async Task RenewLease(DhcpLease lease)
     {
+        // Close modal first
+        CloseLeaseModal();
+        
         // TODO: Implement lease renewal service call
         await JSRuntime.InvokeVoidAsync("alert", $"Lease renewal not yet implemented for {lease.IpAddress}");
     }
 
     private async Task RevokeLease(DhcpLease lease)
     {
+        // Close modal first
+        CloseLeaseModal();
+        
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to revoke the lease for {lease.IpAddress}?");
         if (confirmed)
         {
