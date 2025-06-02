@@ -13,4 +13,6 @@ public interface IReservationService
     Task<(bool success, string? errorMessage)> DeleteReservationAsync(IPAddress ipAddress);
     Task<(bool hasConflict, string? conflictReason)> CheckConflictAsync(DhcpReservation reservation);
     Task<DhcpReservation?> GetReservationForMacAsync(string macAddress);
+    Task<string> ExportReservationsAsJsonAsync();
+    Task<(bool success, string? errorMessage, int importedCount)> ImportReservationsFromJsonAsync(string json);
 }

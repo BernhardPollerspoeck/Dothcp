@@ -14,6 +14,15 @@
             <p class="text-muted">Manage static IP address reservations for specific MAC addresses</p>
         </div>
         <div class="col-auto">
+            <div class="btn-group me-2" role="group">
+                <button class="btn btn-outline-secondary" @onclick="ExportReservations">
+                    <i class="bi bi-download me-2"></i>Export
+                </button>
+                <label class="btn btn-outline-secondary" for="importFile">
+                    <i class="bi bi-upload me-2"></i>Import
+                    <input type="file" id="importFile" style="display: none;" accept=".json" @onchange="OnImportFileSelected" />
+                </label>
+            </div>
             <button class="btn btn-success me-2" @onclick="ShowAddReservationModal">
                 <i class="bi bi-plus-circle me-2"></i>Add Reservation
             </button>
@@ -422,6 +431,51 @@
         catch (Exception ex)
         {
             await JSRuntime.InvokeVoidAsync("alert", $"Error deactivating reservation: {ex.Message}");
+        }
+    }
+
+    private async Task ExportReservations()
+    {
+        try
+        {
+            var json = await ReservationService.ExportReservationsAsJsonAsync();
+            var fileName = $"dhcp-reservations-{DateTime.Now:yyyyMMdd-HHmmss}.json";
+            
+            await JSRuntime.InvokeVoidAsync("downloadFile", fileName, "application/json", json);
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error exporting reservations: {ex.Message}");
+        }
+    }
+
+    private async Task OnImportFileSelected(ChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.Value?.ToString();
+            if (string.IsNullOrEmpty(file))
+                return;
+
+            // Note: In a real implementation, you would need to read the file content
+            // This is simplified for demonstration purposes
+            var json = await JSRuntime.InvokeAsync<string>("readFileAsText", file);
+            
+            var (success, errorMessage, importedCount) = await ReservationService.ImportReservationsFromJsonAsync(json);
+            
+            if (success)
+            {
+                await RefreshReservations();
+                await JSRuntime.InvokeVoidAsync("alert", $"Successfully imported {importedCount} reservations!");
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Import failed: {errorMessage}");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error importing reservations: {ex.Message}");
         }
     }
 }

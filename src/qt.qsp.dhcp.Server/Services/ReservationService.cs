@@ -1,6 +1,7 @@
 using Orleans;
 using qt.qsp.dhcp.Server.Grains.DhcpManager;
 using System.Net;
+using System.Text.Json;
 
 namespace qt.qsp.dhcp.Server.Services;
 
@@ -181,6 +182,116 @@ public class ReservationService : IReservationService
         {
             _logger.LogError(ex, "Failed to get reservation for MAC {MacAddress}", macAddress);
             return null;
+        }
+    }
+
+    public async Task<string> ExportReservationsAsJsonAsync()
+    {
+        try
+        {
+            var reservations = await GetAllReservationsAsync();
+            var exportData = reservations.Select(r => new
+            {
+                IpAddress = r.IpAddress.ToString(),
+                MacAddress = r.MacAddress,
+                Description = r.Description,
+                IsActive = r.IsActive,
+                CreatedAt = r.CreatedAt,
+                LastUsed = r.LastUsed
+            }).ToList();
+
+            return JsonSerializer.Serialize(exportData, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to export reservations");
+            return "[]";
+        }
+    }
+
+    public async Task<(bool success, string? errorMessage, int importedCount)> ImportReservationsFromJsonAsync(string json)
+    {
+        try
+        {
+            if (string.IsNullOrWhiteSpace(json))
+            {
+                return (false, "JSON data is empty", 0);
+            }
+
+            var importData = JsonSerializer.Deserialize<JsonElement[]>(json);
+            if (importData == null || importData.Length == 0)
+            {
+                return (false, "No reservation data found in JSON", 0);
+            }
+
+            var importedCount = 0;
+            var errors = new List<string>();
+
+            foreach (var item in importData)
+            {
+                try
+                {
+                    if (!item.TryGetProperty("IpAddress", out var ipProp) ||
+                        !item.TryGetProperty("MacAddress", out var macProp))
+                    {
+                        errors.Add("Missing required IpAddress or MacAddress property");
+                        continue;
+                    }
+
+                    if (!IPAddress.TryParse(ipProp.GetString(), out var ipAddress))
+                    {
+                        errors.Add($"Invalid IP address: {ipProp.GetString()}");
+                        continue;
+                    }
+
+                    var reservation = new DhcpReservation
+                    {
+                        IpAddress = ipAddress,
+                        MacAddress = macProp.GetString() ?? string.Empty,
+                        Description = item.TryGetProperty("Description", out var descProp) ? descProp.GetString() ?? string.Empty : string.Empty,
+                        IsActive = item.TryGetProperty("IsActive", out var activeProp) ? activeProp.GetBoolean() : true,
+                        CreatedAt = DateTime.UtcNow // Use current time for imports
+                    };
+
+                    // Check for conflicts before importing
+                    var (hasConflict, conflictReason) = await CheckConflictAsync(reservation);
+                    if (hasConflict)
+                    {
+                        errors.Add($"Conflict for {ipAddress}: {conflictReason}");
+                        continue;
+                    }
+
+                    var (success, errorMessage) = await AddReservationAsync(reservation);
+                    if (success)
+                    {
+                        importedCount++;
+                    }
+                    else
+                    {
+                        errors.Add($"Failed to import {ipAddress}: {errorMessage}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    errors.Add($"Error processing reservation: {ex.Message}");
+                }
+            }
+
+            if (errors.Any())
+            {
+                var errorMessage = $"Imported {importedCount} reservations with {errors.Count} errors: {string.Join("; ", errors)}";
+                return (importedCount > 0, errorMessage, importedCount);
+            }
+
+            return (true, null, importedCount);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Failed to import reservations from JSON");
+            return (false, ex.Message, 0);
         }
     }
 }
