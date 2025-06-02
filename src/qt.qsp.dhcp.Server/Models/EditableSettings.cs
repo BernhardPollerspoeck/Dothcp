@@ -25,7 +25,6 @@ public class EditableSettings
 	public string RebindingTime { get; set; } = string.Empty;
 
 	[Display(Name = "Subnet")]
-	[Required(ErrorMessage = "Subnet is required")]
 	public string Subnet { get; set; } = string.Empty;
 
 	[Display(Name = "Subnet Mask")]

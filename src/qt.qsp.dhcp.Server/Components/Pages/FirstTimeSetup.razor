@@ -80,6 +80,13 @@ else if (setupSettings != null)
 						<h5 class="mb-3">🔢 Network Settings</h5>
 						
 						<div class="mb-3">
+							<label for="subnet" class="form-label">Subnet</label>
+							<InputText id="subnet" class="form-control" @bind-Value="setupSettings.Subnet" placeholder="192.168.1.0" />
+							<ValidationMessage For="() => setupSettings.Subnet" class="text-danger" />
+							<div class="form-text">The network subnet address</div>
+						</div>
+						
+						<div class="mb-3">
 							<label for="subnetMask" class="form-label">Subnet Mask</label>
 							<InputText id="subnetMask" class="form-control" @bind-Value="setupSettings.SubnetMask" placeholder="255.255.255.0" />
 							<ValidationMessage For="() => setupSettings.SubnetMask" class="text-danger" />
@@ -144,6 +151,20 @@ else if (setupSettings != null)
 							<InputText id="leaseTime" class="form-control" @bind-Value="setupSettings.LeaseTime" placeholder="24:00:00" />
 							<ValidationMessage For="() => setupSettings.LeaseTime" class="text-danger" />
 							<div class="form-text">How long clients can use an IP address (default: 24 hours)</div>
+						</div>
+						
+						<div class="mb-3">
+							<label for="renewalTime" class="form-label">Renewal Time (HH:MM:SS)</label>
+							<InputText id="renewalTime" class="form-control" @bind-Value="setupSettings.RenewalTime" placeholder="12:00:00" />
+							<ValidationMessage For="() => setupSettings.RenewalTime" class="text-danger" />
+							<div class="form-text">When clients should attempt to renew their lease</div>
+						</div>
+						
+						<div class="mb-3">
+							<label for="rebindingTime" class="form-label">Rebinding Time (HH:MM:SS)</label>
+							<InputText id="rebindingTime" class="form-control" @bind-Value="setupSettings.RebindingTime" placeholder="21:00:00" />
+							<ValidationMessage For="() => setupSettings.RebindingTime" class="text-danger" />
+							<div class="form-text">When clients should attempt to rebind their lease</div>
 						</div>
 					</div>
 					
@@ -233,6 +254,7 @@ else if (setupSettings != null)
 				LeaseTime = "24:00:00",
 				RenewalTime = "12:00:00",
 				RebindingTime = "21:00:00",
+				Subnet = "192.168.1.0",
 				SubnetMask = "255.255.255.0",
 				Router = string.Empty,
 				Dns = "8.8.8.8;8.8.4.4"
@@ -276,6 +298,7 @@ else if (setupSettings != null)
 				var ipParts = selectedIp.Split('.');
 				if (ipParts.Length == 4)
 				{
+					setupSettings.Subnet = $"{ipParts[0]}.{ipParts[1]}.{ipParts[2]}.0";
 					setupSettings.Router = $"{ipParts[0]}.{ipParts[1]}.{ipParts[2]}.1";
 					
 					// Suggest DHCP range that avoids common router IPs
@@ -301,6 +324,7 @@ else if (setupSettings != null)
 			setupSettings.LeaseTime = "24:00:00";
 			setupSettings.RenewalTime = "12:00:00";
 			setupSettings.RebindingTime = "21:00:00";
+			setupSettings.Subnet = "192.168.1.0";
 			setupSettings.SubnetMask = "255.255.255.0";
 			setupSettings.Dns = "8.8.8.8;8.8.4.4";
 		}
@@ -335,6 +359,8 @@ else if (setupSettings != null)
 				try
 				{
 					var networkAddress = NetworkUtilityService.CalculateNetworkAddress(setupSettings.Router, setupSettings.SubnetMask);
+					setupSettings.Subnet = networkAddress; // Update the calculated subnet
+					
 					if (!NetworkUtilityService.IsIpInRange(setupSettings.Router, networkAddress, setupSettings.SubnetMask))
 					{
 						errorMessage = "Router IP must be within the subnet range";
