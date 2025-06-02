@@ -2,7 +2,9 @@
 @using qt.qsp.dhcp.Server.Services
 @using qt.qsp.dhcp.Server.Grains.DhcpManager
 @using qt.qsp.dhcp.Server.Components.Dashboard
+@using Orleans
 @inject IDashboardService DashboardService
+@inject IGrainFactory GrainFactory
 @inject IJSRuntime JSRuntime
 
 <PageTitle>Active Leases - DHCP Server</PageTitle>
@@ -46,7 +48,7 @@
         <div class="col-md-6">
             <div class="row">
                 <div class="col-md-6">
-                    <select class="form-select" @bind="statusFilter" @bind:event="onchange">
+                    <select class="form-select" value="@statusFilter" @onchange="OnStatusFilterChanged">
                         <option value="">All Statuses</option>
                         <option value="Active">Active</option>
                         <option value="Expired">Expired</option>
@@ -54,7 +56,7 @@
                     </select>
                 </div>
                 <div class="col-md-6">
-                    <select class="form-select" @bind="sortColumn" @bind:event="onchange">
+                    <select class="form-select" value="@sortColumn" @onchange="OnSortColumnChanged">
                         <option value="IpAddress">Sort by IP Address</option>
                         <option value="MacAddress">Sort by MAC Address</option>
                         <option value="HostName">Sort by Hostname</option>
@@ -228,7 +230,7 @@
                                         <td>
                                             @if (lease.IsExpired())
                                             {
-                                                <span class="text-danger">Expired</span>
+                                                <span class="text-danger">@lease.LeaseExpiration.ToString("dd.MM.yyyy HH:mm") (expired)</span>
                                             }
                                             else
                                             {
@@ -452,6 +454,30 @@
         ApplyFiltersAndSorting();
     }
 
+    private void OnStatusFilterChanged(ChangeEventArgs e)
+    {
+        statusFilter = e.Value?.ToString() ?? string.Empty;
+        currentPage = 1;
+        ApplyFiltersAndSorting();
+        StateHasChanged();
+    }
+
+    private void OnSortColumnChanged(ChangeEventArgs e)
+    {
+        var newSortColumn = e.Value?.ToString() ?? "IpAddress";
+        if (sortColumn == newSortColumn)
+        {
+            sortDescending = !sortDescending;
+        }
+        else
+        {
+            sortColumn = newSortColumn;
+            sortDescending = false;
+        }
+        ApplyFiltersAndSorting();
+        StateHasChanged();
+    }
+
     private void SortBy(string column)
     {
         if (sortColumn == column)
@@ -537,8 +563,41 @@
         // Close modal first
         CloseLeaseModal();
         
-        // TODO: Implement lease renewal service call
-        await JSRuntime.InvokeVoidAsync("alert", $"Lease renewal not yet implemented for {lease.IpAddress}");
+        try
+        {
+            var leaseGrain = GrainFactory.GetGrain<IDhcpLeaseGrain>(lease.IpAddress.ToString());
+            
+            // Create a renewed lease with extended expiration
+            var renewedLease = new DhcpLease
+            {
+                IpAddress = lease.IpAddress,
+                MacAddress = lease.MacAddress,
+                HostName = lease.HostName,
+                LeaseStart = DateTime.UtcNow,
+                LeaseDuration = lease.LeaseDuration,
+                Status = LeaseStatus.Renewed,
+                Subnet = lease.Subnet,
+                Router = lease.Router,
+                DhcpServer = lease.DhcpServer,
+                DnsServers = lease.DnsServers
+            };
+            
+            var success = await leaseGrain.UpdateLease(renewedLease);
+            
+            if (success)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Lease for {lease.IpAddress} has been successfully renewed.");
+                await RefreshLeases(); // Refresh the data
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Failed to renew lease for {lease.IpAddress}.");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error renewing lease for {lease.IpAddress}: {ex.Message}");
+        }
     }
 
     private async Task RevokeLease(DhcpLease lease)
@@ -549,8 +608,25 @@
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to revoke the lease for {lease.IpAddress}?");
         if (confirmed)
         {
-            // TODO: Implement lease revocation service call
-            await JSRuntime.InvokeVoidAsync("alert", $"Lease revocation not yet implemented for {lease.IpAddress}");
+            try
+            {
+                var leaseGrain = GrainFactory.GetGrain<IDhcpLeaseGrain>(lease.IpAddress.ToString());
+                var success = await leaseGrain.RevokeLease();
+                
+                if (success)
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", $"Lease for {lease.IpAddress} has been successfully revoked.");
+                    await RefreshLeases(); // Refresh the data
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", $"Failed to revoke lease for {lease.IpAddress}.");
+                }
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Error revoking lease for {lease.IpAddress}: {ex.Message}");
+            }
         }
     }
 
@@ -559,8 +635,50 @@
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to renew {selectedLeases.Count} selected lease(s)?");
         if (confirmed)
         {
-            // TODO: Implement bulk lease renewal
-            await JSRuntime.InvokeVoidAsync("alert", $"Bulk lease renewal not yet implemented for {selectedLeases.Count} leases");
+            try
+            {
+                var successCount = 0;
+                var failCount = 0;
+                
+                foreach (var lease in selectedLeases.ToList())
+                {
+                    try
+                    {
+                        var leaseGrain = GrainFactory.GetGrain<IDhcpLeaseGrain>(lease.IpAddress.ToString());
+                        
+                        // Create a renewed lease with extended expiration
+                        var renewedLease = new DhcpLease
+                        {
+                            IpAddress = lease.IpAddress,
+                            MacAddress = lease.MacAddress,
+                            HostName = lease.HostName,
+                            LeaseStart = DateTime.UtcNow,
+                            LeaseDuration = lease.LeaseDuration,
+                            Status = LeaseStatus.Renewed,
+                            Subnet = lease.Subnet,
+                            Router = lease.Router,
+                            DhcpServer = lease.DhcpServer,
+                            DnsServers = lease.DnsServers
+                        };
+                        
+                        var success = await leaseGrain.UpdateLease(renewedLease);
+                        if (success) successCount++;
+                        else failCount++;
+                    }
+                    catch
+                    {
+                        failCount++;
+                    }
+                }
+                
+                await JSRuntime.InvokeVoidAsync("alert", $"Bulk renewal completed: {successCount} successful, {failCount} failed.");
+                selectedLeases.Clear();
+                await RefreshLeases();
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Error during bulk renewal: {ex.Message}");
+            }
         }
     }
 
@@ -569,8 +687,34 @@
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to revoke {selectedLeases.Count} selected lease(s)?");
         if (confirmed)
         {
-            // TODO: Implement bulk lease revocation
-            await JSRuntime.InvokeVoidAsync("alert", $"Bulk lease revocation not yet implemented for {selectedLeases.Count} leases");
+            try
+            {
+                var successCount = 0;
+                var failCount = 0;
+                
+                foreach (var lease in selectedLeases.ToList())
+                {
+                    try
+                    {
+                        var leaseGrain = GrainFactory.GetGrain<IDhcpLeaseGrain>(lease.IpAddress.ToString());
+                        var success = await leaseGrain.RevokeLease();
+                        if (success) successCount++;
+                        else failCount++;
+                    }
+                    catch
+                    {
+                        failCount++;
+                    }
+                }
+                
+                await JSRuntime.InvokeVoidAsync("alert", $"Bulk revocation completed: {successCount} successful, {failCount} failed.");
+                selectedLeases.Clear();
+                await RefreshLeases();
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Error during bulk revocation: {ex.Message}");
+            }
         }
     }
 
