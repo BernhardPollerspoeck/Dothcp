@@ -1,6 +1,7 @@
 @using qt.qsp.dhcp.Server.Services
 @inject IDashboardService DashboardService
 @inject IFirstRunService FirstRunService
+@inject IDhcpServerService DhcpServerService
 @implements IDisposable
 
 <div class="nav-item px-3">
@@ -31,10 +32,14 @@
 
         if (isConfigured)
         {
-            await RefreshServerStatus();
+            // Subscribe to state changes for immediate updates
+            DhcpServerService.StateChanged += OnServerStateChanged;
             
-            // Set up auto-refresh every 10 seconds only if configured
-            refreshTimer = new Timer(async _ => await RefreshServerStatus(), null, TimeSpan.Zero, TimeSpan.FromSeconds(10));
+            // Initialize current state
+            serverState = DhcpServerService.CurrentState;
+            
+            // Set up auto-refresh every 10 seconds as backup
+            refreshTimer = new Timer(async _ => await RefreshServerStatus(), null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
         }
         else
         {
@@ -76,6 +81,15 @@
         }
     }
 
+    private async void OnServerStateChanged(object? sender, ServerState newState)
+    {
+        if (newState != serverState)
+        {
+            serverState = newState;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
     private string GetStatusIconClass() => serverState switch
     {
         ServerState.Running => "bi bi-play-circle-fill text-success",
@@ -103,5 +117,6 @@
     public void Dispose()
     {
         refreshTimer?.Dispose();
+        DhcpServerService.StateChanged -= OnServerStateChanged;
     }
 }
