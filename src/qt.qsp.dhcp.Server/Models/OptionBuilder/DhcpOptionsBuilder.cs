@@ -82,7 +82,7 @@ public class DhcpOptionsBuilder
 	}
 	public DhcpOptionsBuilder AddRouterOption(string[] routerOptions)
 	{
-		if (routerOptions.Length < 1)
+		if (routerOptions == null || routerOptions.Length < 1)
 		{
 			throw new InvalidDataException("At least 1 router is required");
 		}
@@ -95,7 +95,7 @@ public class DhcpOptionsBuilder
 	}
 	public DhcpOptionsBuilder AddDnsServerOptions(string[] dnsServers)
 	{
-		if (dnsServers.Length < 1)
+		if (dnsServers == null || dnsServers.Length < 1)
 		{
 			return this;
 		}
@@ -118,7 +118,7 @@ public class DhcpOptionsBuilder
 
 	public DhcpOptionsBuilder AddNetBiosNameServers(string[] nameServers)
 	{
-		if (nameServers.Length < 1)
+		if (nameServers == null || nameServers.Length < 1)
 		{
 			return this;
 		}
@@ -152,7 +152,7 @@ public class DhcpOptionsBuilder
 
 	public DhcpOptionsBuilder AddNtpServerOptions(string[] ntpServers)
 	{
-		if (ntpServers.Length < 1)
+		if (ntpServers == null || ntpServers.Length < 1)
 		{
 			return this;
 		}
@@ -216,7 +216,7 @@ public class DhcpOptionsBuilder
 
 	public DhcpOptionsBuilder AddDnsSearchList(string[] searchDomains)
 	{
-		if (searchDomains.Length < 1)
+		if (searchDomains == null || searchDomains.Length < 1)
 		{
 			return this;
 		}
@@ -293,7 +293,7 @@ public class DhcpOptionsBuilder
 
 	public DhcpOptionsBuilder AddClasslessStaticRoutes(Dictionary<(byte prefixLength, byte[] networkPrefix), IPAddress> routes)
 	{
-		if (routes.Count < 1)
+		if (routes == null || routes.Count < 1)
 		{
 			return this;
 		}

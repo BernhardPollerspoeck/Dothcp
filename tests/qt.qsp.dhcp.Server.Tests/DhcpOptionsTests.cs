@@ -396,4 +396,100 @@ public class DhcpOptionsTests
             Assert.Equal(searchDomains[i], sortedRetrieved[i]);
         }
     }
+    
+    [Fact]
+    public void AddNtpServerOptions_WithNullArray_ShouldNotThrow()
+    {
+        // Arrange
+        var builder = new DhcpOptionsBuilder();
+        
+        // Act & Assert - Should not throw exception
+        var result = builder.AddNtpServerOptions(null);
+        
+        Assert.NotNull(result);
+        var options = result.Build();
+        
+        // Should only contain the End option
+        Assert.Single(options);
+        Assert.Equal(EOption.End, options[0].Option);
+    }
+    
+    [Fact]
+    public void AddDnsServerOptions_WithNullArray_ShouldNotThrow()
+    {
+        // Arrange
+        var builder = new DhcpOptionsBuilder();
+        
+        // Act & Assert - Should not throw exception
+        var result = builder.AddDnsServerOptions(null);
+        
+        Assert.NotNull(result);
+        var options = result.Build();
+        
+        // Should only contain the End option
+        Assert.Single(options);
+        Assert.Equal(EOption.End, options[0].Option);
+    }
+    
+    [Fact]
+    public void AddNetBiosNameServers_WithNullArray_ShouldNotThrow()
+    {
+        // Arrange
+        var builder = new DhcpOptionsBuilder();
+        
+        // Act & Assert - Should not throw exception
+        var result = builder.AddNetBiosNameServers(null);
+        
+        Assert.NotNull(result);
+        var options = result.Build();
+        
+        // Should only contain the End option
+        Assert.Single(options);
+        Assert.Equal(EOption.End, options[0].Option);
+    }
+    
+    [Fact]
+    public void AddDnsSearchList_WithNullArray_ShouldNotThrow()
+    {
+        // Arrange
+        var builder = new DhcpOptionsBuilder();
+        
+        // Act & Assert - Should not throw exception
+        var result = builder.AddDnsSearchList(null);
+        
+        Assert.NotNull(result);
+        var options = result.Build();
+        
+        // Should only contain the End option
+        Assert.Single(options);
+        Assert.Equal(EOption.End, options[0].Option);
+    }
+    
+    [Fact]
+    public void AddClasslessStaticRoutes_WithNullDictionary_ShouldNotThrow()
+    {
+        // Arrange
+        var builder = new DhcpOptionsBuilder();
+        
+        // Act & Assert - Should not throw exception
+        var result = builder.AddClasslessStaticRoutes(null);
+        
+        Assert.NotNull(result);
+        var options = result.Build();
+        
+        // Should only contain the End option
+        Assert.Single(options);
+        Assert.Equal(EOption.End, options[0].Option);
+    }
+    
+    [Fact]
+    public void AddRouterOption_WithNullArray_ShouldThrowInvalidDataException()
+    {
+        // Arrange
+        var builder = new DhcpOptionsBuilder();
+        
+        // Act & Assert - Router is required, so null should throw
+        var exception = Assert.Throws<InvalidDataException>(() => builder.AddRouterOption(null));
+        Assert.Equal("At least 1 router is required", exception.Message);
+    }
 }
