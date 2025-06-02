@@ -68,7 +68,7 @@ public class ReservationService : IReservationService
                 return (false, "MAC address is required");
             }
 
-            if (reservation.IpAddress == IPAddress.None)
+            if (string.IsNullOrEmpty(reservation.IpAddressString) || !IPAddress.TryParse(reservation.IpAddressString, out var _) || reservation.IpAddress.Equals(IPAddress.None))
             {
                 return (false, "IP address is required");
             }
@@ -105,7 +105,7 @@ public class ReservationService : IReservationService
                 return (false, "MAC address is required");
             }
 
-            if (reservation.IpAddress == IPAddress.None)
+            if (string.IsNullOrEmpty(reservation.IpAddressString) || !IPAddress.TryParse(reservation.IpAddressString, out var _) || reservation.IpAddress.Equals(IPAddress.None))
             {
                 return (false, "IP address is required");
             }
