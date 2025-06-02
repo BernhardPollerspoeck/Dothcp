@@ -1,5 +1,6 @@
 @using qt.qsp.dhcp.Server.Services
 @inject IDashboardService DashboardService
+@inject IFirstRunService FirstRunService
 @implements IDisposable
 
 <div class="nav-item px-3">
@@ -14,17 +15,42 @@
 @code {
     private ServerState serverState = ServerState.Stopped;
     private Timer? refreshTimer;
+    private bool isConfigured = false;
 
     protected override async Task OnInitializedAsync()
     {
-        await RefreshServerStatus();
-        
-        // Set up auto-refresh every 10 seconds
-        refreshTimer = new Timer(async _ => await RefreshServerStatus(), null, TimeSpan.Zero, TimeSpan.FromSeconds(10));
+        // Check if system is configured before starting status monitoring
+        try
+        {
+            isConfigured = !await FirstRunService.IsFirstRunAsync();
+        }
+        catch
+        {
+            isConfigured = false;
+        }
+
+        if (isConfigured)
+        {
+            await RefreshServerStatus();
+            
+            // Set up auto-refresh every 10 seconds only if configured
+            refreshTimer = new Timer(async _ => await RefreshServerStatus(), null, TimeSpan.Zero, TimeSpan.FromSeconds(10));
+        }
+        else
+        {
+            // Set appropriate state for unconfigured system
+            serverState = ServerState.Stopped;
+        }
     }
 
     private async Task RefreshServerStatus()
     {
+        // Don't attempt to refresh if system is not configured
+        if (!isConfigured)
+        {
+            return;
+        }
+
         try
         {
             var dashboardData = await DashboardService.GetDashboardDataAsync();
