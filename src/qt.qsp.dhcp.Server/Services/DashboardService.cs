@@ -16,6 +16,7 @@ public class DashboardService : IDashboardService
     private readonly ISettingsLoaderService _settingsLoader;
     private readonly INetworkUtilityService _networkUtility;
     private readonly IDhcpServerService _dhcpServerService;
+    private readonly IWebHostEnvironment _environment;
     private static readonly DateTime _serverStartTime = DateTime.UtcNow;
 
     public DashboardService(
@@ -24,7 +25,8 @@ public class DashboardService : IDashboardService
         ILogger<DashboardService> logger,
         ISettingsLoaderService settingsLoader,
         INetworkUtilityService networkUtility,
-        IDhcpServerService dhcpServerService)
+        IDhcpServerService dhcpServerService,
+        IWebHostEnvironment environment)
     {
         _grainFactory = grainFactory;
         _leaseSearchService = leaseSearchService;
@@ -32,6 +34,7 @@ public class DashboardService : IDashboardService
         _settingsLoader = settingsLoader;
         _networkUtility = networkUtility;
         _dhcpServerService = dhcpServerService;
+        _environment = environment;
     }
 
     public async Task<DashboardData> GetDashboardDataAsync()
@@ -335,5 +338,145 @@ public class DashboardService : IDashboardService
             _logger.LogError(ex, "Error getting recent leases");
             return [];
         }
+    }
+
+    public async Task<List<DhcpLease>> GetAllLeasesAsync()
+    {
+        var allLeases = new List<DhcpLease>();
+
+        try
+        {
+            // Get DHCP configuration from settings
+            var minAddress = await _settingsLoader.GetSetting<byte>(SettingsConstants.DHCP_RANGE_LOW);
+            var maxAddress = await _settingsLoader.GetSetting<byte>(SettingsConstants.DHCP_RANGE_HIGH);
+            var routerBytes = await _settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER);
+            var subnetMask = await _settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
+
+            // Check if settings exist - add test leases for development if not configured
+            if (routerBytes == null || string.IsNullOrEmpty(subnetMask))
+            {
+                _logger.LogDebug("DHCP network settings not configured yet - checking for development test leases");
+                
+                // Add test leases for development environment
+                if (_environment.IsDevelopment())
+                {
+                    allLeases.AddRange(GetTestLeases());
+                    _logger.LogInformation("Added {Count} test leases for development", allLeases.Count);
+                }
+                
+                return allLeases;
+            }
+
+            // Build the network base (first 3 octets)
+            var networkBase = string.Join('.', routerBytes[0..^1]);
+            
+            // Calculate network and broadcast addresses to skip reserved IPs
+            var networkAddress = _networkUtility.CalculateNetworkAddress($"{networkBase}.0", subnetMask);
+            var broadcastAddress = _networkUtility.CalculateBroadcastAddress($"{networkBase}.0", subnetMask);
+            
+            // Check all IPs in the configured range for leases
+            for (var i = minAddress; i <= maxAddress; i++)
+            {
+                try
+                {
+                    var ipAddress = $"{networkBase}.{i}";
+                    
+                    // Skip reserved addresses (network and broadcast)
+                    if (_networkUtility.IsReservedIp(ipAddress, networkAddress, broadcastAddress))
+                    {
+                        continue;
+                    }
+                    
+                    var leaseGrain = _grainFactory.GetGrain<IDhcpLeaseGrain>(ipAddress);
+                    var lease = await leaseGrain.GetLease();
+                    
+                    if (lease != null)
+                    {
+                        allLeases.Add(lease);
+                    }
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogDebug(ex, "Error getting lease for IP {IpAddress}", $"{networkBase}.{i}");
+                }
+            }
+
+            // Add test leases for development environment (in addition to real leases)
+            if (_environment.IsDevelopment() && allLeases.Count < 5)
+            {
+                var testLeases = GetTestLeases();
+                allLeases.AddRange(testLeases);
+                _logger.LogInformation("Added {Count} additional test leases for development", testLeases.Count);
+            }
+
+            return allLeases.OrderByDescending(l => l.LeaseStart).ToList();
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Error getting all leases");
+            
+            // Return test leases for development even on error
+            if (_environment.IsDevelopment())
+            {
+                return GetTestLeases();
+            }
+            
+            return [];
+        }
+    }
+
+    private List<DhcpLease> GetTestLeases()
+    {
+        var testLeases = new List<DhcpLease>();
+        var random = new Random();
+        var hostnames = new[] { "laptop-001", "desktop-pc", "mobile-phone", "tablet-device", "smart-tv", "printer-hp", "router-wifi", "camera-ip" };
+        var macPrefixes = new[] { "00:1B:44", "00:50:56", "08:00:27", "52:54:00", "00:16:3E" };
+
+        for (int i = 0; i < 8; i++)
+        {
+            var macPrefix = macPrefixes[random.Next(macPrefixes.Length)];
+            var macSuffix = $"{random.Next(0, 256):X2}:{random.Next(0, 256):X2}:{random.Next(0, 256):X2}";
+            var hostname = hostnames[i % hostnames.Length];
+            var ipAddress = IPAddress.Parse($"192.168.1.{100 + i}");
+            
+            var leaseStart = DateTime.UtcNow.AddHours(-random.Next(1, 24));
+            var leaseDuration = TimeSpan.FromHours(random.Next(8, 48));
+            
+            var status = i switch
+            {
+                7 => LeaseStatus.Expired, // One expired lease
+                6 => LeaseStatus.Renewed, // One renewed lease
+                _ => LeaseStatus.Active    // Rest are active
+            };
+
+            // For expired lease, make sure it's actually expired
+            if (status == LeaseStatus.Expired)
+            {
+                leaseStart = DateTime.UtcNow.AddHours(-25);
+                leaseDuration = TimeSpan.FromHours(24);
+            }
+
+            var testLease = new DhcpLease
+            {
+                IpAddress = ipAddress,
+                MacAddress = $"{macPrefix}:{macSuffix}",
+                HostName = hostname,
+                LeaseStart = leaseStart,
+                LeaseDuration = leaseDuration,
+                Status = status,
+                Subnet = IPAddress.Parse("255.255.255.0"),
+                Router = IPAddress.Parse("192.168.1.1"),
+                DhcpServer = IPAddress.Parse("192.168.1.1"),
+                DnsServers = new List<IPAddress> 
+                { 
+                    IPAddress.Parse("8.8.8.8"), 
+                    IPAddress.Parse("8.8.4.4") 
+                }
+            };
+
+            testLeases.Add(testLease);
+        }
+
+        return testLeases;
     }
 }

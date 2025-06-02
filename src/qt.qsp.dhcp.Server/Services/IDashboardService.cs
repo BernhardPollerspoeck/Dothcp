@@ -6,6 +6,7 @@ namespace qt.qsp.dhcp.Server.Services;
 public interface IDashboardService
 {
     Task<DashboardData> GetDashboardDataAsync();
+    Task<List<DhcpLease>> GetAllLeasesAsync();
 }
 
 public class DashboardData
