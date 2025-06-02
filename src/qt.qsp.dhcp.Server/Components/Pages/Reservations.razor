@@ -344,7 +344,6 @@
             {
                 CloseModal();
                 await RefreshReservations();
-                await JSRuntime.InvokeVoidAsync("alert", "Reservation saved successfully!");
             }
             else
             {
@@ -364,29 +363,24 @@
 
     private async Task DeleteReservation(DhcpReservation reservation)
     {
-        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", 
-            $"Are you sure you want to delete the reservation for {reservation.MacAddress} -> {reservation.IpAddress}?");
-        
-        if (confirmed)
+        try
         {
-            try
+            var (success, errorMessage) = await ReservationService.DeleteReservationAsync(reservation.IpAddress);
+            
+            if (success)
             {
-                var (success, errorMessage) = await ReservationService.DeleteReservationAsync(reservation.IpAddress);
-                
-                if (success)
-                {
-                    await RefreshReservations();
-                    await JSRuntime.InvokeVoidAsync("alert", "Reservation deleted successfully!");
-                }
-                else
-                {
-                    await JSRuntime.InvokeVoidAsync("alert", $"Failed to delete reservation: {errorMessage}");
-                }
+                await RefreshReservations();
             }
-            catch (Exception ex)
+            else
             {
-                await JSRuntime.InvokeVoidAsync("alert", $"Error deleting reservation: {ex.Message}");
+                modalErrorMessage = $"Failed to delete reservation: {errorMessage}";
+                StateHasChanged();
             }
+        }
+        catch (Exception ex)
+        {
+            modalErrorMessage = $"Error deleting reservation: {ex.Message}";
+            StateHasChanged();
         }
     }
 
@@ -403,12 +397,14 @@
             }
             else
             {
-                await JSRuntime.InvokeVoidAsync("alert", $"Failed to activate reservation: {errorMessage}");
+                modalErrorMessage = $"Failed to activate reservation: {errorMessage}";
+                StateHasChanged();
             }
         }
         catch (Exception ex)
         {
-            await JSRuntime.InvokeVoidAsync("alert", $"Error activating reservation: {ex.Message}");
+            modalErrorMessage = $"Error activating reservation: {ex.Message}";
+            StateHasChanged();
         }
     }
 
@@ -425,12 +421,14 @@
             }
             else
             {
-                await JSRuntime.InvokeVoidAsync("alert", $"Failed to deactivate reservation: {errorMessage}");
+                modalErrorMessage = $"Failed to deactivate reservation: {errorMessage}";
+                StateHasChanged();
             }
         }
         catch (Exception ex)
         {
-            await JSRuntime.InvokeVoidAsync("alert", $"Error deactivating reservation: {ex.Message}");
+            modalErrorMessage = $"Error deactivating reservation: {ex.Message}";
+            StateHasChanged();
         }
     }
 
@@ -445,7 +443,8 @@
         }
         catch (Exception ex)
         {
-            await JSRuntime.InvokeVoidAsync("alert", $"Error exporting reservations: {ex.Message}");
+            modalErrorMessage = $"Error exporting reservations: {ex.Message}";
+            StateHasChanged();
         }
     }
 
@@ -466,16 +465,18 @@
             if (success)
             {
                 await RefreshReservations();
-                await JSRuntime.InvokeVoidAsync("alert", $"Successfully imported {importedCount} reservations!");
+                modalErrorMessage = string.Empty;
             }
             else
             {
-                await JSRuntime.InvokeVoidAsync("alert", $"Import failed: {errorMessage}");
+                modalErrorMessage = $"Import failed: {errorMessage}";
             }
+            StateHasChanged();
         }
         catch (Exception ex)
         {
-            await JSRuntime.InvokeVoidAsync("alert", $"Error importing reservations: {ex.Message}");
+            modalErrorMessage = $"Error importing reservations: {ex.Message}";
+            StateHasChanged();
         }
     }
 }
