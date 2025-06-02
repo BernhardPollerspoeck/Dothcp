@@ -80,16 +80,9 @@ else if (setupSettings != null)
 						<h5 class="mb-3">🔢 Network Settings</h5>
 						
 						<div class="mb-3">
-							<label for="subnet" class="form-label">Subnet</label>
-							<InputText id="subnet" class="form-control" @bind-Value="setupSettings.Subnet" placeholder="192.168.1.0" />
-							<ValidationMessage For="() => setupSettings.Subnet" class="text-danger" />
-							<div class="form-text">The network subnet address</div>
-						</div>
-						
-						<div class="mb-3">
 							<label for="subnetMask" class="form-label">Subnet Mask</label>
-							<InputText id="subnetMask" class="form-control" @bind-Value="setupSettings.SubnetMask" placeholder="255.255.255.0" />
-							<ValidationMessage For="() => setupSettings.SubnetMask" class="text-danger" />
+							<InputText id="subnetMask" class="form-control" @bind-Value="setupSettings.Subnet" placeholder="255.255.255.0" />
+							<ValidationMessage For="() => setupSettings.Subnet" class="text-danger" />
 							<div class="form-text">The subnet mask for your network (e.g., 255.255.255.0 for /24)</div>
 						</div>
 						
@@ -100,7 +93,7 @@ else if (setupSettings != null)
 							<div class="form-text">The IP address of your router/gateway</div>
 						</div>
 						
-						@if (!string.IsNullOrEmpty(setupSettings.SubnetMask) && !string.IsNullOrEmpty(setupSettings.Router))
+						@if (!string.IsNullOrEmpty(setupSettings.Subnet) && !string.IsNullOrEmpty(setupSettings.Router))
 						{
 							<div class="alert alert-success">
 								<small>
@@ -254,8 +247,7 @@ else if (setupSettings != null)
 				LeaseTime = "24:00:00",
 				RenewalTime = "12:00:00",
 				RebindingTime = "21:00:00",
-				Subnet = "192.168.1.0",
-				SubnetMask = "255.255.255.0",
+				Subnet = "255.255.255.0", // This is actually the subnet mask
 				Router = string.Empty,
 				Dns = "8.8.8.8;8.8.4.4"
 			};
@@ -298,7 +290,6 @@ else if (setupSettings != null)
 				var ipParts = selectedIp.Split('.');
 				if (ipParts.Length == 4)
 				{
-					setupSettings.Subnet = $"{ipParts[0]}.{ipParts[1]}.{ipParts[2]}.0";
 					setupSettings.Router = $"{ipParts[0]}.{ipParts[1]}.{ipParts[2]}.1";
 					
 					// Suggest DHCP range that avoids common router IPs
@@ -324,8 +315,7 @@ else if (setupSettings != null)
 			setupSettings.LeaseTime = "24:00:00";
 			setupSettings.RenewalTime = "12:00:00";
 			setupSettings.RebindingTime = "21:00:00";
-			setupSettings.Subnet = "192.168.1.0";
-			setupSettings.SubnetMask = "255.255.255.0";
+			setupSettings.Subnet = "255.255.255.0"; // This is actually the subnet mask
 			setupSettings.Dns = "8.8.8.8;8.8.4.4";
 		}
 		StateHasChanged();
@@ -354,14 +344,13 @@ else if (setupSettings != null)
 			StateHasChanged();
 
 			// Additional validation for network consistency
-			if (!string.IsNullOrEmpty(setupSettings.Router) && !string.IsNullOrEmpty(setupSettings.SubnetMask))
+			if (!string.IsNullOrEmpty(setupSettings.Router) && !string.IsNullOrEmpty(setupSettings.Subnet))
 			{
 				try
 				{
-					var networkAddress = NetworkUtilityService.CalculateNetworkAddress(setupSettings.Router, setupSettings.SubnetMask);
-					setupSettings.Subnet = networkAddress; // Update the calculated subnet
+					var networkAddress = NetworkUtilityService.CalculateNetworkAddress(setupSettings.Router, setupSettings.Subnet);
 					
-					if (!NetworkUtilityService.IsIpInRange(setupSettings.Router, networkAddress, setupSettings.SubnetMask))
+					if (!NetworkUtilityService.IsIpInRange(setupSettings.Router, networkAddress, setupSettings.Subnet))
 					{
 						errorMessage = "Router IP must be within the subnet range";
 						showErrorMessage = true;
@@ -393,7 +382,7 @@ else if (setupSettings != null)
 				(SettingsConstants.DHCP_LEASE_TIME, setupSettings.LeaseTime),
 				(SettingsConstants.DHCP_LEASE_RENEWAL, setupSettings.RenewalTime),
 				(SettingsConstants.DHCP_LEASE_REBINDING, setupSettings.RebindingTime),
-				(SettingsConstants.DHCP_LEASE_SUBNET, setupSettings.SubnetMask),
+				(SettingsConstants.DHCP_LEASE_SUBNET, setupSettings.Subnet), // This is actually the subnet mask
 				(SettingsConstants.DHCP_LEASE_ROUTER, setupSettings.Router),
 				(SettingsConstants.DHCP_LEASE_DNS, setupSettings.Dns)
 			};
@@ -452,9 +441,9 @@ else if (setupSettings != null)
 	{
 		try
 		{
-			if (setupSettings != null && !string.IsNullOrEmpty(setupSettings.Router) && !string.IsNullOrEmpty(setupSettings.SubnetMask))
+			if (setupSettings != null && !string.IsNullOrEmpty(setupSettings.Router) && !string.IsNullOrEmpty(setupSettings.Subnet))
 			{
-				return NetworkUtilityService.CalculateNetworkAddress(setupSettings.Router, setupSettings.SubnetMask);
+				return NetworkUtilityService.CalculateNetworkAddress(setupSettings.Router, setupSettings.Subnet);
 			}
 		}
 		catch
@@ -485,9 +474,9 @@ else if (setupSettings != null)
 	{
 		try
 		{
-			if (setupSettings != null && !string.IsNullOrEmpty(setupSettings.Router) && !string.IsNullOrEmpty(setupSettings.SubnetMask))
+			if (setupSettings != null && !string.IsNullOrEmpty(setupSettings.Router) && !string.IsNullOrEmpty(setupSettings.Subnet))
 			{
-				var broadcast = NetworkUtilityService.CalculateBroadcastAddress(setupSettings.Router, setupSettings.SubnetMask);
+				var broadcast = NetworkUtilityService.CalculateBroadcastAddress(setupSettings.Router, setupSettings.Subnet);
 				return NetworkUtilityService.GetLastUsableIp(broadcast);
 			}
 		}

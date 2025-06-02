@@ -24,12 +24,9 @@ public class EditableSettings
 	[Required(ErrorMessage = "Rebinding Time is required")]
 	public string RebindingTime { get; set; } = string.Empty;
 
-	[Display(Name = "Subnet")]
-	public string Subnet { get; set; } = string.Empty;
-
 	[Display(Name = "Subnet Mask")]
 	[Required(ErrorMessage = "Subnet Mask is required")]
-	public string SubnetMask { get; set; } = string.Empty;
+	public string Subnet { get; set; } = string.Empty;
 
 	[Display(Name = "Router")]
 	[Required(ErrorMessage = "Router is required")]
