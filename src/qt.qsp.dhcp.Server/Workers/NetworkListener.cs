@@ -4,10 +4,11 @@ using qt.qsp.dhcp.Server.Models;
 using qt.qsp.dhcp.Server.Models.Enumerations;
 using qt.qsp.dhcp.Server.Grains.MessageParser;
 using qt.qsp.dhcp.Server.Grains.DhcpManager;
+using qt.qsp.dhcp.Server.Services;
 
 namespace qt.qsp.dhcp.Server.Workers;
 
-public class NetworkListener(IGrainFactory grainFactory)
+public class NetworkListener(IGrainFactory grainFactory, IDhcpServerService serverService)
 	: BackgroundService
 {
 	#region BackgroundService
@@ -19,6 +20,13 @@ public class NetworkListener(IGrainFactory grainFactory)
 			try
 			{
 				var incommingData = await listener.ReceiveAsync(stoppingToken);
+				
+				// Check if the DHCP server is enabled before processing requests
+				if (!serverService.IsEnabled)
+				{
+					continue;
+				}
+				
 				var incommingMessage = await ParseMessage(incommingData.Buffer);
 
 				var id = incommingMessage.GetClientId();

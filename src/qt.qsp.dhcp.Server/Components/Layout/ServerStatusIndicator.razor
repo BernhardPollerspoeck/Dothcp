@@ -1,0 +1,137 @@
+@using qt.qsp.dhcp.Server.Services
+@inject IDashboardService DashboardService
+@inject IFirstRunService FirstRunService
+@inject IDhcpServerService DhcpServerService
+@implements IDisposable
+
+<div class="nav-item px-3">
+    <div class="nav-link">
+        <span class="@GetStatusIconClass()" aria-hidden="true"></span>
+        <span class="text-@GetStatusTextClass()">
+            @GetStatusText()
+        </span>
+    </div>
+</div>
+
+@code {
+    private ServerState serverState = ServerState.Stopped;
+    private Timer? refreshTimer;
+    private bool isConfigured = false;
+
+    protected override async Task OnInitializedAsync()
+    {
+        // Subscribe to state changes for immediate updates
+        DhcpServerService.StateChanged += OnServerStateChanged;
+        
+        // Check configuration status and initialize
+        await RefreshConfigurationStatus();
+        
+        // Set up auto-refresh every 10 seconds
+        refreshTimer = new Timer(async _ => await RefreshServerStatus(), null, TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(10));
+    }
+
+    private async Task RefreshConfigurationStatus()
+    {
+        try
+        {
+            var wasConfigured = isConfigured;
+            isConfigured = !await FirstRunService.IsFirstRunAsync();
+            
+            // If configuration status changed, update server state
+            if (wasConfigured != isConfigured)
+            {
+                if (isConfigured)
+                {
+                    // System is now configured, get current server state
+                    serverState = DhcpServerService.CurrentState;
+                }
+                else
+                {
+                    // System is not configured
+                    serverState = ServerState.Stopped;
+                }
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch
+        {
+            isConfigured = false;
+            serverState = ServerState.Stopped;
+        }
+    }
+
+    private async Task RefreshServerStatus()
+    {
+        // Always check configuration status first
+        await RefreshConfigurationStatus();
+        
+        // Don't attempt to refresh if system is not configured
+        if (!isConfigured)
+        {
+            return;
+        }
+
+        try
+        {
+            var dashboardData = await DashboardService.GetDashboardDataAsync();
+            if (dashboardData?.ServerStatus != null)
+            {
+                var newState = dashboardData.ServerStatus.State;
+                if (newState != serverState)
+                {
+                    serverState = newState;
+                    await InvokeAsync(StateHasChanged);
+                }
+            }
+        }
+        catch (Exception)
+        {
+            // Silently handle errors in auto-refresh
+            var errorState = ServerState.Error;
+            if (errorState != serverState)
+            {
+                serverState = errorState;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+    }
+
+    private async void OnServerStateChanged(object? sender, ServerState newState)
+    {
+        if (newState != serverState)
+        {
+            serverState = newState;
+            await InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private string GetStatusIconClass() => serverState switch
+    {
+        ServerState.Running => "bi bi-play-circle-fill text-success",
+        ServerState.Stopped => "bi bi-stop-circle-fill text-secondary",
+        ServerState.Error => "bi bi-exclamation-triangle-fill text-danger",
+        _ => "bi bi-question-circle-fill text-muted"
+    };
+
+    private string GetStatusTextClass() => serverState switch
+    {
+        ServerState.Running => "success",
+        ServerState.Stopped => "secondary",
+        ServerState.Error => "danger",
+        _ => "muted"
+    };
+
+    private string GetStatusText() => serverState switch
+    {
+        ServerState.Running => "Running",
+        ServerState.Stopped => "Stopped",
+        ServerState.Error => "Error",
+        _ => "Unknown"
+    };
+
+    public void Dispose()
+    {
+        refreshTimer?.Dispose();
+        DhcpServerService.StateChanged -= OnServerStateChanged;
+    }
+}

@@ -16,6 +16,13 @@ public class SettingsGrain(
     public Task<TResult> GetValue<TResult>()
     {
         var val = state.State.Value;
+        
+        // Handle null values gracefully - return appropriate defaults
+        if (val == null)
+        {
+            return Task.FromResult(default(TResult)!);
+        }
+        
         var typeHolder = typeof(TResult).Name;
         return Task.FromResult(
             typeof(TResult).Name switch

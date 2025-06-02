@@ -1,0 +1,523 @@
+@page "/setup"
+@using qt.qsp.dhcp.Server.Grains.Settings
+@using qt.qsp.dhcp.Server.Constants
+@using qt.qsp.dhcp.Server.Services
+@using qt.qsp.dhcp.Server.Models
+@using qt.qsp.dhcp.Server.Utilities
+@using System.ComponentModel.DataAnnotations
+
+@inject IClusterClient ClusterClient
+@inject ISettingsService SettingsService
+@inject INetworkUtilityService NetworkUtilityService
+@inject IDhcpServerService DhcpServerService
+@inject NavigationManager Navigation
+
+<h3>🚀 Welcome to DHCP Server</h3>
+<p class="lead">Let's get your DHCP server configured for the first time!</p>
+
+@if (showErrorMessage)
+{
+	<div class="alert alert-danger alert-dismissible fade show" role="alert">
+		Error during setup: @errorMessage
+		<button type="button" class="btn-close" @onclick="() => showErrorMessage = false"></button>
+	</div>
+}
+
+@if (isLoading)
+{
+	<div class="text-center py-5">
+		<div class="spinner-border" role="status">
+			<span class="visually-hidden">Setting up DHCP server...</span>
+		</div>
+		<div class="mt-3">
+			<h5>@loadingMessage</h5>
+		</div>
+	</div>
+}
+else if (setupSettings != null)
+{
+	<div class="card">
+		<div class="card-body">
+			<EditForm Model="setupSettings" OnValidSubmit="CompleteSetup">
+				<DataAnnotationsValidator />
+				
+				<div class="row">
+					<div class="col-md-12">
+						<h5 class="mb-3">🌐 Network Configuration</h5>
+						
+						<div class="mb-3">
+							<label for="networkInterface" class="form-label">
+								<i class="bi bi-ethernet"></i> Select Network Interface
+							</label>
+							<select id="networkInterface" class="form-control" @onchange="OnNetworkInterfaceChanged">
+								<option value="">Choose the network interface for your DHCP server...</option>
+								@if (networkInterfaces != null)
+								{
+									@foreach (var kvp in networkInterfaces)
+									{
+										<option value="@kvp.Value">@kvp.Key (@kvp.Value)</option>
+									}
+								}
+							</select>
+							<div class="form-text">This is the network interface where the DHCP server will listen for requests</div>
+						</div>
+						
+						@if (selectedInterfaceInfo != null)
+						{
+							<div class="alert alert-info">
+								<h6><i class="bi bi-info-circle"></i> Detected Network Configuration</h6>
+								<small>
+									<strong>Interface:</strong> @selectedInterfaceInfo<br />
+									<strong>Auto-configured settings based on this interface:</strong>
+								</small>
+							</div>
+						}
+					</div>
+				</div>
+				
+				<div class="row">
+					<div class="col-md-6">
+						<h5 class="mb-3">🔢 Network Settings</h5>
+						
+						<div class="mb-3">
+							<label for="subnetMask" class="form-label">Subnet Mask</label>
+							<InputText id="subnetMask" class="form-control" @bind-Value="setupSettings.Subnet" placeholder="255.255.255.0" />
+							<ValidationMessage For="() => setupSettings.Subnet" class="text-danger" />
+							<div class="form-text">The subnet mask for your network (e.g., 255.255.255.0 for /24)</div>
+						</div>
+						
+						<div class="mb-3">
+							<label for="router" class="form-label">Default Gateway (Router)</label>
+							<InputText id="router" class="form-control" @bind-Value="setupSettings.Router" placeholder="192.168.1.1" />
+							<ValidationMessage For="() => setupSettings.Router" class="text-danger" />
+							<div class="form-text">The IP address of your router/gateway</div>
+						</div>
+						
+						@if (!string.IsNullOrEmpty(setupSettings.Subnet) && !string.IsNullOrEmpty(setupSettings.Router))
+						{
+							<div class="alert alert-success">
+								<small>
+									<strong>📊 Network Range:</strong><br />
+									Network: @CalculateNetworkAddress()<br />
+									Usable IPs: @CalculateFirstUsableIp() - @CalculateLastUsableIp()
+								</small>
+							</div>
+						}
+					</div>
+					
+					<div class="col-md-6">
+						<h5 class="mb-3">🎯 DHCP Range</h5>
+						
+						<div class="mb-3">
+							<label for="rangeLow" class="form-label">DHCP Range Start</label>
+							<InputNumber id="rangeLow" class="form-control" @bind-Value="setupSettings.RangeLow" />
+							<ValidationMessage For="() => setupSettings.RangeLow" class="text-danger" />
+							<div class="form-text">Starting IP address for DHCP assignments (last octet: 1-254)</div>
+						</div>
+						
+						<div class="mb-3">
+							<label for="rangeHigh" class="form-label">DHCP Range End</label>
+							<InputNumber id="rangeHigh" class="form-control" @bind-Value="setupSettings.RangeHigh" />
+							<ValidationMessage For="() => setupSettings.RangeHigh" class="text-danger" />
+							<div class="form-text">Ending IP address for DHCP assignments (last octet: 1-254)</div>
+						</div>
+						
+						@if (setupSettings.RangeLow > 0 && setupSettings.RangeHigh > 0 && !string.IsNullOrEmpty(setupSettings.Router))
+						{
+							<div class="alert alert-info">
+								<small>
+									<strong>📡 DHCP Pool:</strong><br />
+									@CalculateDhcpRange()<br />
+									<strong>Available IPs:</strong> @Math.Max(0, setupSettings.RangeHigh - setupSettings.RangeLow + 1)
+								</small>
+							</div>
+						}
+					</div>
+				</div>
+				
+				<div class="row">
+					<div class="col-md-6">
+						<h5 class="mb-3">⏱️ Lease Timing (Optional)</h5>
+						
+						<div class="mb-3">
+							<label for="leaseTime" class="form-label">Lease Duration (HH:MM:SS)</label>
+							<InputText id="leaseTime" class="form-control" @bind-Value="setupSettings.LeaseTime" placeholder="24:00:00" />
+							<ValidationMessage For="() => setupSettings.LeaseTime" class="text-danger" />
+							<div class="form-text">How long clients can use an IP address (default: 24 hours)</div>
+						</div>
+						
+						<div class="mb-3">
+							<label for="renewalTime" class="form-label">Renewal Time (HH:MM:SS)</label>
+							<InputText id="renewalTime" class="form-control" @bind-Value="setupSettings.RenewalTime" placeholder="12:00:00" />
+							<ValidationMessage For="() => setupSettings.RenewalTime" class="text-danger" />
+							<div class="form-text">When clients should attempt to renew their lease</div>
+						</div>
+						
+						<div class="mb-3">
+							<label for="rebindingTime" class="form-label">Rebinding Time (HH:MM:SS)</label>
+							<InputText id="rebindingTime" class="form-control" @bind-Value="setupSettings.RebindingTime" placeholder="21:00:00" />
+							<ValidationMessage For="() => setupSettings.RebindingTime" class="text-danger" />
+							<div class="form-text">When clients should attempt to rebind their lease</div>
+						</div>
+					</div>
+					
+					<div class="col-md-6">
+						<h5 class="mb-3">🌐 DNS Settings (Optional)</h5>
+						
+						<div class="mb-3">
+							<label for="dns" class="form-label">DNS Servers</label>
+							<InputTextArea id="dns" class="form-control" rows="2" @bind-Value="setupSettings.Dns" placeholder="8.8.8.8;8.8.4.4" />
+							<ValidationMessage For="() => setupSettings.Dns" class="text-danger" />
+							<div class="form-text">DNS servers for clients (semicolon separated). Leave empty to use router IP.</div>
+						</div>
+					</div>
+				</div>
+				
+				<div class="mt-4 d-flex gap-2 justify-content-end">
+					<button type="button" class="btn btn-outline-secondary" @onclick="LoadDefaults">
+						🔄 Load Smart Defaults
+					</button>
+					<button type="submit" class="btn btn-primary btn-lg" disabled="@isSaving">
+						@if (isSaving)
+						{
+							<span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+						}
+						🚀 Complete Setup & Start DHCP Server
+					</button>
+				</div>
+			</EditForm>
+		</div>
+	</div>
+}
+
+@code {
+	private EditableSettings? setupSettings;
+	private Dictionary<string, string>? networkInterfaces;
+	private string? selectedInterfaceInfo;
+	private bool isLoading = true;
+	private bool isSaving = false;
+	private bool showErrorMessage = false;
+	private string errorMessage = string.Empty;
+	private string loadingMessage = "Initializing setup wizard...";
+
+	protected override async Task OnInitializedAsync()
+	{
+		// Check if setup is already completed
+		if (await IsSetupCompleted())
+		{
+			Navigation.NavigateTo("/settings");
+			return;
+		}
+		
+		await LoadSetupData();
+	}
+
+	private async Task<bool> IsSetupCompleted()
+	{
+		try
+		{
+			// Check if basic required settings exist
+			var subnetGrain = ClusterClient.GetGrain<ISettingsGrain>(SettingsConstants.DHCP_LEASE_SUBNET);
+			var routerGrain = ClusterClient.GetGrain<ISettingsGrain>(SettingsConstants.DHCP_LEASE_ROUTER);
+			
+			return await subnetGrain.HasValue() && await routerGrain.HasValue();
+		}
+		catch
+		{
+			return false;
+		}
+	}
+
+	private async Task LoadSetupData()
+	{
+		isLoading = true;
+		loadingMessage = "Detecting network interfaces...";
+		StateHasChanged();
+
+		try
+		{
+			await Task.Delay(500); // Small delay for better UX
+			
+			LoadNetworkInterfaces();
+			
+			setupSettings = new EditableSettings
+			{
+				RangeLow = 100,  // Smart defaults
+				RangeHigh = 200,
+				LeaseTime = "24:00:00",
+				RenewalTime = "12:00:00",
+				RebindingTime = "21:00:00",
+				Subnet = "255.255.255.0", // This is actually the subnet mask
+				Router = string.Empty,
+				Dns = "8.8.8.8;8.8.4.4"
+			};
+		}
+		catch (Exception ex)
+		{
+			errorMessage = $"Failed to initialize setup: {ex.Message}";
+			showErrorMessage = true;
+		}
+		finally
+		{
+			isLoading = false;
+			StateHasChanged();
+		}
+	}
+
+	private void LoadNetworkInterfaces()
+	{
+		try
+		{
+			networkInterfaces = SettingsService.GetAvailableNetworkInterfaces();
+		}
+		catch (Exception ex)
+		{
+			Console.WriteLine($"Error loading network interfaces: {ex.Message}");
+			networkInterfaces = new Dictionary<string, string>();
+		}
+	}
+
+	private void OnNetworkInterfaceChanged(ChangeEventArgs e)
+	{
+		if (setupSettings != null && e.Value != null)
+		{
+			var selectedIp = e.Value.ToString();
+			if (!string.IsNullOrEmpty(selectedIp))
+			{
+				selectedInterfaceInfo = networkInterfaces?.FirstOrDefault(kvp => kvp.Value == selectedIp).Key;
+				
+				// Auto-populate network settings based on selected interface
+				var ipParts = selectedIp.Split('.');
+				if (ipParts.Length == 4)
+				{
+					setupSettings.Router = $"{ipParts[0]}.{ipParts[1]}.{ipParts[2]}.1";
+					
+					// Suggest DHCP range that avoids common router IPs
+					var thirdOctet = int.Parse(ipParts[2]);
+					setupSettings.RangeLow = 100;
+					setupSettings.RangeHigh = 200;
+				}
+			}
+			else
+			{
+				selectedInterfaceInfo = null;
+			}
+		}
+		StateHasChanged();
+	}
+
+	private void LoadDefaults()
+	{
+		if (setupSettings != null)
+		{
+			setupSettings.RangeLow = 100;
+			setupSettings.RangeHigh = 200;
+			setupSettings.LeaseTime = "24:00:00";
+			setupSettings.RenewalTime = "12:00:00";
+			setupSettings.RebindingTime = "21:00:00";
+			setupSettings.Subnet = "255.255.255.0"; // This is actually the subnet mask
+			setupSettings.Dns = "8.8.8.8;8.8.4.4";
+		}
+		StateHasChanged();
+	}
+
+	private async Task CompleteSetup()
+	{
+		if (setupSettings == null) return;
+
+		isSaving = true;
+		showErrorMessage = false;
+		loadingMessage = "Saving configuration...";
+		StateHasChanged();
+
+		try
+		{
+			// Validate range consistency
+			if (setupSettings.RangeLow >= setupSettings.RangeHigh)
+			{
+				errorMessage = "DHCP Range Start must be less than Range End";
+				showErrorMessage = true;
+				return;
+			}
+
+			loadingMessage = "Validating network settings...";
+			StateHasChanged();
+
+			// Additional validation for network consistency
+			if (!string.IsNullOrEmpty(setupSettings.Router) && !string.IsNullOrEmpty(setupSettings.Subnet))
+			{
+				try
+				{
+					var networkAddress = NetworkUtilityService.CalculateNetworkAddress(setupSettings.Router, setupSettings.Subnet);
+					
+					if (!NetworkUtilityService.IsIpInRange(setupSettings.Router, networkAddress, setupSettings.Subnet))
+					{
+						errorMessage = "Router IP must be within the subnet range";
+						showErrorMessage = true;
+						return;
+					}
+				}
+				catch (Exception ex)
+				{
+					errorMessage = $"Network validation error: {ex.Message}";
+					showErrorMessage = true;
+					return;
+				}
+			}
+
+			// Set default DNS to router if not specified
+			if (string.IsNullOrWhiteSpace(setupSettings.Dns) && !string.IsNullOrEmpty(setupSettings.Router))
+			{
+				setupSettings.Dns = setupSettings.Router;
+			}
+
+			loadingMessage = "Saving settings to server...";
+			StateHasChanged();
+
+			// Prepare settings to save
+			var settingsToSave = new[]
+			{
+				(SettingsConstants.DHCP_RANGE_LOW, setupSettings.RangeLow.ToString()),
+				(SettingsConstants.DHCP_RANGE_HIGH, setupSettings.RangeHigh.ToString()),
+				(SettingsConstants.DHCP_LEASE_TIME, setupSettings.LeaseTime),
+				(SettingsConstants.DHCP_LEASE_RENEWAL, setupSettings.RenewalTime),
+				(SettingsConstants.DHCP_LEASE_REBINDING, setupSettings.RebindingTime),
+				(SettingsConstants.DHCP_LEASE_SUBNET, setupSettings.Subnet), // This is actually the subnet mask
+				(SettingsConstants.DHCP_LEASE_ROUTER, setupSettings.Router),
+				(SettingsConstants.DHCP_LEASE_DNS, setupSettings.Dns)
+			};
+
+			// Validate all settings first
+			foreach (var (key, value) in settingsToSave)
+			{
+				if (!await SettingsService.ValidateSettingAsync(key, value))
+				{
+					errorMessage = $"Invalid value for {GetDisplayName(key)}: {value}";
+					showErrorMessage = true;
+					return;
+				}
+			}
+
+			// Save all settings
+			foreach (var (key, value) in settingsToSave)
+			{
+				await SettingsService.SetSettingAsync(key, value);
+			}
+
+			loadingMessage = "Setup completed! Starting DHCP server...";
+			StateHasChanged();
+			
+			// Start the DHCP server
+			var startResult = await DhcpServerService.StartAsync();
+			if (!startResult)
+			{
+				errorMessage = "Settings saved successfully, but failed to start DHCP server. You can start it manually from the dashboard.";
+				showErrorMessage = true;
+				return;
+			}
+			
+			loadingMessage = "DHCP server started! Redirecting to dashboard...";
+			StateHasChanged();
+			
+			await Task.Delay(1000); // Brief pause to show completion
+			
+			// Navigate to dashboard after successful setup and start
+			Navigation.NavigateTo("/");
+		}
+		catch (Exception ex)
+		{
+			errorMessage = $"Failed to complete setup: {ex.Message}";
+			showErrorMessage = true;
+		}
+		finally
+		{
+			isSaving = false;
+			isLoading = false;
+			StateHasChanged();
+		}
+	}
+
+	private string CalculateNetworkAddress()
+	{
+		try
+		{
+			if (setupSettings != null && !string.IsNullOrEmpty(setupSettings.Router) && !string.IsNullOrEmpty(setupSettings.Subnet))
+			{
+				return NetworkUtilityService.CalculateNetworkAddress(setupSettings.Router, setupSettings.Subnet);
+			}
+		}
+		catch
+		{
+			// Ignore calculation errors
+		}
+		return "N/A";
+	}
+
+	private string CalculateFirstUsableIp()
+	{
+		try
+		{
+			var networkAddress = CalculateNetworkAddress();
+			if (networkAddress != "N/A")
+			{
+				return NetworkUtilityService.GetFirstUsableIp(networkAddress);
+			}
+		}
+		catch
+		{
+			// Ignore calculation errors
+		}
+		return "N/A";
+	}
+
+	private string CalculateLastUsableIp()
+	{
+		try
+		{
+			if (setupSettings != null && !string.IsNullOrEmpty(setupSettings.Router) && !string.IsNullOrEmpty(setupSettings.Subnet))
+			{
+				var broadcast = NetworkUtilityService.CalculateBroadcastAddress(setupSettings.Router, setupSettings.Subnet);
+				return NetworkUtilityService.GetLastUsableIp(broadcast);
+			}
+		}
+		catch
+		{
+			// Ignore calculation errors
+		}
+		return "N/A";
+	}
+
+	private string CalculateDhcpRange()
+	{
+		try
+		{
+			if (setupSettings != null && !string.IsNullOrEmpty(setupSettings.Router))
+			{
+				var routerParts = setupSettings.Router.Split('.');
+				if (routerParts.Length == 4)
+				{
+					var baseIp = $"{routerParts[0]}.{routerParts[1]}.{routerParts[2]}";
+					return $"{baseIp}.{setupSettings.RangeLow} - {baseIp}.{setupSettings.RangeHigh}";
+				}
+			}
+		}
+		catch
+		{
+			// Ignore calculation errors
+		}
+		return "N/A";
+	}
+
+	private static string GetDisplayName(string key) => key switch
+	{
+		SettingsConstants.DHCP_RANGE_LOW => "DHCP Range Start",
+		SettingsConstants.DHCP_RANGE_HIGH => "DHCP Range End",
+		SettingsConstants.DHCP_LEASE_TIME => "Lease Duration",
+		SettingsConstants.DHCP_LEASE_RENEWAL => "Renewal Time",
+		SettingsConstants.DHCP_LEASE_REBINDING => "Rebinding Time",
+		SettingsConstants.DHCP_LEASE_SUBNET => "Subnet Mask",
+		SettingsConstants.DHCP_LEASE_ROUTER => "Router",
+		SettingsConstants.DHCP_LEASE_DNS => "DNS Servers",
+		_ => key
+	};
+}

@@ -1,5 +1,6 @@
 @using qt.qsp.dhcp.Server.Services
 @using System.Net.NetworkInformation
+@inject IDhcpServerService DhcpServerService
 
 <div class="card">
     <div class="card-header">
@@ -81,6 +82,7 @@
 
 @code {
     [Parameter] public ServerStatus ServerStatus { get; set; } = new();
+    [Parameter] public EventCallback OnRefresh { get; set; }
 
     private string FormatUptime(TimeSpan uptime)
     {
@@ -113,21 +115,30 @@
         };
     }
 
-    private void StartService()
+    private async void StartService()
     {
-        // Placeholder for service start functionality
-        // In a real implementation, this would call a service management API
+        await DhcpServerService.StartAsync();
+        if (OnRefresh.HasDelegate)
+        {
+            await OnRefresh.InvokeAsync();
+        }
     }
 
-    private void StopService()
+    private async void StopService()
     {
-        // Placeholder for service stop functionality
-        // In a real implementation, this would call a service management API
+        await DhcpServerService.StopAsync();
+        if (OnRefresh.HasDelegate)
+        {
+            await OnRefresh.InvokeAsync();
+        }
     }
 
-    private void RestartService()
+    private async void RestartService()
     {
-        // Placeholder for service restart functionality
-        // In a real implementation, this would call a service management API
+        await DhcpServerService.RestartAsync();
+        if (OnRefresh.HasDelegate)
+        {
+            await OnRefresh.InvokeAsync();
+        }
     }
 }

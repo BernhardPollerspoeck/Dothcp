@@ -1,0 +1,71 @@
+@using qt.qsp.dhcp.Server.Services
+@inject IFirstRunService FirstRunService
+@inject NavigationManager Navigation
+
+@if (isCheckingFirstRun)
+{
+    <div class="d-flex justify-content-center align-items-center" style="height: 100vh;">
+        <div class="text-center">
+            <div class="spinner-border text-primary" role="status">
+                <span class="visually-hidden">Checking system status...</span>
+            </div>
+            <div class="mt-3">
+                <h5>Initializing DHCP Server...</h5>
+                <p class="text-muted">Checking configuration status</p>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    @ChildContent
+}
+
+@code {
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+    
+    private bool isCheckingFirstRun = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            // Small delay for better UX - prevents flash of loading screen
+            await Task.Delay(300);
+            
+            // Check if this is the first run
+            var isFirstRun = await FirstRunService.IsFirstRunAsync();
+            
+            if (isFirstRun)
+            {
+                // Redirect to setup page if it's the first run and we're not already there
+                var currentUri = Navigation.ToBaseRelativePath(Navigation.Uri);
+                if (!currentUri.StartsWith("setup"))
+                {
+                    Navigation.NavigateTo("/setup", replace: true);
+                    return;
+                }
+            }
+            else
+            {
+                // If setup is completed but user is on setup page, redirect to home
+                var currentUri = Navigation.ToBaseRelativePath(Navigation.Uri);
+                if (currentUri.StartsWith("setup"))
+                {
+                    Navigation.NavigateTo("/", replace: true);
+                    return;
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            // Log error and proceed normally
+            Console.WriteLine($"Error checking first run status: {ex.Message}");
+        }
+        finally
+        {
+            isCheckingFirstRun = false;
+            StateHasChanged();
+        }
+    }
+}
