@@ -65,6 +65,13 @@ public class DashboardService : IDashboardService
             var routerBytes = await _settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER);
             var subnetMask = await _settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
             
+            // Check if settings exist - return empty info if not configured
+            if (routerBytes == null || string.IsNullOrEmpty(subnetMask))
+            {
+                _logger.LogDebug("DHCP network settings not configured yet");
+                return new DhcpNetworkInfo();
+            }
+            
             var routerAddress = string.Join('.', routerBytes);
             var networkAddress = _networkUtility.CalculateNetworkAddress(routerAddress, subnetMask);
             var cidrNotation = GetCidrNotation(subnetMask);
@@ -202,6 +209,13 @@ public class DashboardService : IDashboardService
             var routerBytes = await _settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER);
             var subnetMask = await _settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
 
+            // Check if settings exist - return empty statistics if not configured
+            if (routerBytes == null || string.IsNullOrEmpty(subnetMask))
+            {
+                _logger.LogDebug("DHCP network settings not configured yet - returning empty lease statistics");
+                return new LeaseStatistics { TotalAddresses = 0, LeasedAddresses = 0, ReservedAddresses = 0 };
+            }
+
             // Build the network base (first 3 octets)
             var networkBase = string.Join('.', routerBytes[0..^1]);
             
@@ -268,6 +282,13 @@ public class DashboardService : IDashboardService
             var maxAddress = await _settingsLoader.GetSetting<byte>(SettingsConstants.DHCP_RANGE_HIGH);
             var routerBytes = await _settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER);
             var subnetMask = await _settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
+
+            // Check if settings exist - return empty list if not configured
+            if (routerBytes == null || string.IsNullOrEmpty(subnetMask))
+            {
+                _logger.LogDebug("DHCP network settings not configured yet - returning empty recent leases");
+                return recentLeases;
+            }
 
             // Build the network base (first 3 octets)
             var networkBase = string.Join('.', routerBytes[0..^1]);
