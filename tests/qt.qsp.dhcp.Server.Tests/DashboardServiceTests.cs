@@ -1,5 +1,6 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.AspNetCore.Hosting;
 using Moq;
 using Orleans;
 using qt.qsp.dhcp.Server.Grains.DhcpManager;
@@ -19,6 +20,7 @@ public class DashboardServiceTests
         var mockSettingsLoader = new Mock<ISettingsLoaderService>();
         var mockNetworkUtility = new Mock<INetworkUtilityService>();
         var mockDhcpServerService = new Mock<IDhcpServerService>();
+        var mockEnvironment = new Mock<IWebHostEnvironment>();
         var logger = NullLogger<DashboardService>.Instance;
 
         // Setup default values for settings
@@ -49,13 +51,17 @@ public class DashboardServiceTests
         // Setup DHCP server service mock
         mockDhcpServerService.Setup(x => x.CurrentState).Returns(ServerState.Running);
 
+        // Setup environment mock to not be development  
+        mockEnvironment.Setup(x => x.EnvironmentName).Returns("Production");
+
         return new DashboardService(
             mockGrainFactory.Object,
             mockLeaseSearchService.Object,
             logger,
             mockSettingsLoader.Object,
             mockNetworkUtility.Object,
-            mockDhcpServerService.Object);
+            mockDhcpServerService.Object,
+            mockEnvironment.Object);
     }
 
     [Fact]
@@ -117,6 +123,7 @@ public class DashboardServiceTests
         var mockSettingsLoader = new Mock<ISettingsLoaderService>();
         var mockNetworkUtility = new Mock<INetworkUtilityService>();
         var mockDhcpServerService = new Mock<IDhcpServerService>();
+        var mockEnvironment = new Mock<IWebHostEnvironment>();
         var logger = NullLogger<DashboardService>.Instance;
 
         // Setup settings to return null values (simulating fresh startup without settings)
@@ -132,13 +139,17 @@ public class DashboardServiceTests
         // Setup DHCP server service mock
         mockDhcpServerService.Setup(x => x.CurrentState).Returns(ServerState.Stopped);
 
+        // Setup environment mock to not be development  
+        mockEnvironment.Setup(x => x.EnvironmentName).Returns("Production");
+
         var dashboardService = new DashboardService(
             mockGrainFactory.Object,
             mockLeaseSearchService.Object,
             logger,
             mockSettingsLoader.Object,
             mockNetworkUtility.Object,
-            mockDhcpServerService.Object);
+            mockDhcpServerService.Object,
+            mockEnvironment.Object);
 
         // Act & Assert - should not throw exception
         var result = await dashboardService.GetDashboardDataAsync();

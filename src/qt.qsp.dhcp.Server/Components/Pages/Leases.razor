@@ -1,0 +1,731 @@
+@page "/leases"
+@using qt.qsp.dhcp.Server.Services
+@using qt.qsp.dhcp.Server.Grains.DhcpManager
+@using qt.qsp.dhcp.Server.Components.Dashboard
+@using Orleans
+@inject IDashboardService DashboardService
+@inject IGrainFactory GrainFactory
+@inject IJSRuntime JSRuntime
+
+<PageTitle>Active Leases - DHCP Server</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="h3">Active DHCP Leases</h1>
+            <p class="text-muted">View and manage all active DHCP leases</p>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-primary" @onclick="RefreshLeases" disabled="@isLoading">
+                @if (isLoading)
+                {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                }
+                else
+                {
+                    <i class="bi bi-arrow-clockwise me-2"></i>
+                }
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    <!-- Search and Filter Section -->
+    <div class="row mb-4">
+        <div class="col-md-6">
+            <div class="input-group">
+                <span class="input-group-text"><i class="bi bi-search"></i></span>
+                <input type="text" class="form-control" placeholder="Search by IP, MAC, or hostname..." 
+                       @bind="searchTerm" @bind:event="oninput" @onkeyup="OnSearchChanged" />
+                @if (!string.IsNullOrEmpty(searchTerm))
+                {
+                    <button class="btn btn-outline-secondary" type="button" @onclick="ClearSearch">
+                        <i class="bi bi-x"></i>
+                    </button>
+                }
+            </div>
+        </div>
+        <div class="col-md-6">
+            <div class="row">
+                <div class="col-md-6">
+                    <select class="form-select" value="@statusFilter" @onchange="OnStatusFilterChanged">
+                        <option value="">All Statuses</option>
+                        <option value="Active">Active</option>
+                        <option value="Expired">Expired</option>
+                        <option value="Renewed">Renewed</option>
+                    </select>
+                </div>
+                <div class="col-md-6">
+                    <select class="form-select" value="@sortColumn" @onchange="OnSortColumnChanged">
+                        <option value="IpAddress">Sort by IP Address</option>
+                        <option value="MacAddress">Sort by MAC Address</option>
+                        <option value="HostName">Sort by Hostname</option>
+                        <option value="LeaseStart">Sort by Lease Start</option>
+                        <option value="LeaseExpiration">Sort by Expiration</option>
+                        <option value="Status">Sort by Status</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (isLoading && allLeases == null)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <div class="mt-2">Loading lease data...</div>
+        </div>
+    }
+    else if (allLeases != null)
+    {
+        <!-- Lease Statistics -->
+        <div class="row mb-3">
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title">@filteredLeases.Count</h5>
+                        <p class="card-text text-muted">Total Leases</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-success">@filteredLeases.Count(l => l.Status == LeaseStatus.Active && !l.IsExpired())</h5>
+                        <p class="card-text text-muted">Active</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-danger">@filteredLeases.Count(l => l.IsExpired())</h5>
+                        <p class="card-text text-muted">Expired</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-3">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-info">@filteredLeases.Count(l => l.Status == LeaseStatus.Renewed)</h5>
+                        <p class="card-text text-muted">Renewed</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Bulk Actions -->
+        @if (selectedLeases.Count > 0)
+        {
+            <div class="alert alert-info d-flex justify-content-between align-items-center">
+                <span>@selectedLeases.Count lease(s) selected</span>
+                <div class="btn-group" role="group">
+                    <button class="btn btn-outline-warning btn-sm" @onclick="BulkRenewSelected">
+                        <i class="bi bi-arrow-clockwise"></i> Renew Selected
+                    </button>
+                    <button class="btn btn-outline-danger btn-sm" @onclick="BulkRevokeSelected">
+                        <i class="bi bi-x-circle"></i> Revoke Selected
+                    </button>
+                    <button class="btn btn-outline-secondary btn-sm" @onclick="ClearSelection">
+                        <i class="bi bi-x"></i> Clear Selection
+                    </button>
+                </div>
+            </div>
+        }
+
+        <!-- Leases Table -->
+        <div class="card">
+            <div class="card-body">
+                @if (filteredLeases.Any())
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm">
+                            <thead>
+                                <tr>
+                                    <th>
+                                        <input type="checkbox" @onchange="ToggleSelectAll" 
+                                               checked="@(selectedLeases.Count > 0 && selectedLeases.Count == currentPageLeases.Count)" />
+                                    </th>
+                                    <th>
+                                        <button class="btn btn-link p-0 text-decoration-none" @onclick='() => SortBy("IpAddress")'>
+                                            IP Address
+                                            @if (sortColumn == "IpAddress")
+                                            {
+                                                <i class="bi @(sortDescending ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i>
+                                            }
+                                        </button>
+                                    </th>
+                                    <th>
+                                        <button class="btn btn-link p-0 text-decoration-none" @onclick='() => SortBy("MacAddress")'>
+                                            MAC Address
+                                            @if (sortColumn == "MacAddress")
+                                            {
+                                                <i class="bi @(sortDescending ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i>
+                                            }
+                                        </button>
+                                    </th>
+                                    <th>
+                                        <button class="btn btn-link p-0 text-decoration-none" @onclick='() => SortBy("HostName")'>
+                                            Hostname
+                                            @if (sortColumn == "HostName")
+                                            {
+                                                <i class="bi @(sortDescending ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i>
+                                            }
+                                        </button>
+                                    </th>
+                                    <th>
+                                        <button class="btn btn-link p-0 text-decoration-none" @onclick='() => SortBy("Status")'>
+                                            Status
+                                            @if (sortColumn == "Status")
+                                            {
+                                                <i class="bi @(sortDescending ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i>
+                                            }
+                                        </button>
+                                    </th>
+                                    <th>
+                                        <button class="btn btn-link p-0 text-decoration-none" @onclick='() => SortBy("LeaseStart")'>
+                                            Lease Start
+                                            @if (sortColumn == "LeaseStart")
+                                            {
+                                                <i class="bi @(sortDescending ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i>
+                                            }
+                                        </button>
+                                    </th>
+                                    <th>
+                                        <button class="btn btn-link p-0 text-decoration-none" @onclick='() => SortBy("LeaseExpiration")'>
+                                            Expires
+                                            @if (sortColumn == "LeaseExpiration")
+                                            {
+                                                <i class="bi @(sortDescending ? "bi-caret-down-fill" : "bi-caret-up-fill")"></i>
+                                            }
+                                        </button>
+                                    </th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var lease in currentPageLeases)
+                                {
+                                    <tr class="@(selectedLeases.Contains(lease) ? "table-active" : "")">
+                                        <td>
+                                            <input type="checkbox" 
+                                                   checked="@selectedLeases.Contains(lease)" 
+                                                   @onchange="() => ToggleSelection(lease)" />
+                                        </td>
+                                        <td>
+                                            <code>@lease.IpAddress</code>
+                                        </td>
+                                        <td>
+                                            <code>@lease.MacAddress</code>
+                                        </td>
+                                        <td>@(lease.HostName ?? "-")</td>
+                                        <td>
+                                            <span class="badge @GetStatusBadgeClass(lease.Status)">
+                                                @lease.Status
+                                            </span>
+                                        </td>
+                                        <td>@lease.LeaseStart.ToString("MM/dd/yyyy HH:mm")</td>
+                                        <td>
+                                            @if (lease.IsExpired())
+                                            {
+                                                <span class="text-danger">@lease.LeaseExpiration.ToString("dd.MM.yyyy HH:mm") (expired)</span>
+                                            }
+                                            else
+                                            {
+                                                <span>@lease.LeaseExpiration.ToString("MM/dd/yyyy HH:mm")</span>
+                                            }
+                                        </td>
+                                        <td>
+                                            <div class="btn-group btn-group-sm" role="group">
+                                                <button class="btn btn-outline-info btn-sm" @onclick="() => ViewLeaseDetails(lease)" title="View Details">
+                                                    <i class="bi bi-eye"></i>
+                                                </button>
+                                                <button class="btn btn-outline-warning btn-sm" @onclick="() => RenewLease(lease)" title="Renew Lease">
+                                                    <i class="bi bi-arrow-clockwise"></i>
+                                                </button>
+                                                <button class="btn btn-outline-danger btn-sm" @onclick="() => RevokeLease(lease)" title="Revoke Lease">
+                                                    <i class="bi bi-x-circle"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    @if (totalPages > 1)
+                    {
+                        <nav aria-label="Lease pagination">
+                            <ul class="pagination justify-content-center">
+                                <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                                    <button class="page-link" @onclick="() => GoToPage(1)" disabled="@(currentPage == 1)">
+                                        <i class="bi bi-chevron-double-left"></i>
+                                    </button>
+                                </li>
+                                <li class="page-item @(currentPage == 1 ? "disabled" : "")">
+                                    <button class="page-link" @onclick="() => GoToPage(currentPage - 1)" disabled="@(currentPage == 1)">
+                                        <i class="bi bi-chevron-left"></i>
+                                    </button>
+                                </li>
+
+                                @for (int i = Math.Max(1, currentPage - 2); i <= Math.Min(totalPages, currentPage + 2); i++)
+                                {
+                                    var pageNumber = i;
+                                    <li class="page-item @(currentPage == pageNumber ? "active" : "")">
+                                        <button class="page-link" @onclick="() => GoToPage(pageNumber)">@pageNumber</button>
+                                    </li>
+                                }
+
+                                <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                                    <button class="page-link" @onclick="() => GoToPage(currentPage + 1)" disabled="@(currentPage == totalPages)">
+                                        <i class="bi bi-chevron-right"></i>
+                                    </button>
+                                </li>
+                                <li class="page-item @(currentPage == totalPages ? "disabled" : "")">
+                                    <button class="page-link" @onclick="() => GoToPage(totalPages)" disabled="@(currentPage == totalPages)">
+                                        <i class="bi bi-chevron-double-right"></i>
+                                    </button>
+                                </li>
+                            </ul>
+                        </nav>
+
+                        <div class="text-center text-muted">
+                            Showing @((currentPage - 1) * pageSize + 1) to @Math.Min(currentPage * pageSize, filteredLeases.Count) of @filteredLeases.Count leases
+                        </div>
+                    }
+                }
+                else
+                {
+                    <div class="text-center py-4 text-muted">
+                        <i class="bi bi-info-circle display-6"></i>
+                        <div class="mt-2">No leases found matching your criteria</div>
+                        @if (!string.IsNullOrEmpty(searchTerm) || !string.IsNullOrEmpty(statusFilter))
+                        {
+                            <button class="btn btn-outline-primary mt-2" @onclick="ClearFilters">
+                                Clear Filters
+                            </button>
+                        }
+                    </div>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-warning" role="alert">
+            <i class="bi bi-exclamation-triangle"></i>
+            Unable to load lease data. Please try refreshing the page.
+        </div>
+    }
+</div>
+
+<!-- Lease Details Modal -->
+<LeaseDetailsModal IsVisible="showLeaseModal" 
+                   Lease="selectedLease" 
+                   OnClose="CloseLeaseModal"
+                   OnRenew="RenewLease" 
+                   OnRevoke="RevokeLease" />
+
+@code {
+    private List<DhcpLease>? allLeases;
+    private List<DhcpLease> filteredLeases = new();
+    private List<DhcpLease> currentPageLeases = new();
+    private HashSet<DhcpLease> selectedLeases = new();
+    private bool isLoading = true;
+
+    // Search and filtering
+    private string searchTerm = string.Empty;
+    private string statusFilter = string.Empty;
+
+    // Sorting
+    private string sortColumn = "IpAddress";
+    private bool sortDescending = false;
+
+    // Pagination
+    private int currentPage = 1;
+    private int pageSize = 25;
+    private int totalPages = 1;
+
+    // Modal state
+    private bool showLeaseModal = false;
+    private DhcpLease? selectedLease = null;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshLeases();
+    }
+
+    private async Task RefreshLeases()
+    {
+        isLoading = true;
+        selectedLeases.Clear();
+        StateHasChanged();
+
+        try
+        {
+            allLeases = await DashboardService.GetAllLeasesAsync();
+            ApplyFiltersAndSorting();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading leases: {ex.Message}");
+            allLeases = null;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ApplyFiltersAndSorting()
+    {
+        if (allLeases == null) return;
+
+        // Apply filters
+        filteredLeases = allLeases.Where(lease =>
+        {
+            // Search filter
+            if (!string.IsNullOrEmpty(searchTerm))
+            {
+                var search = searchTerm.ToLowerInvariant();
+                if (!lease.IpAddress.ToString().Contains(search) &&
+                    !lease.MacAddress.ToLowerInvariant().Contains(search) &&
+                    !(lease.HostName?.ToLowerInvariant().Contains(search) ?? false))
+                {
+                    return false;
+                }
+            }
+
+            // Status filter
+            if (!string.IsNullOrEmpty(statusFilter))
+            {
+                if (lease.Status.ToString() != statusFilter)
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }).ToList();
+
+        // Apply sorting
+        filteredLeases = sortColumn switch
+        {
+            "IpAddress" => sortDescending 
+                ? filteredLeases.OrderByDescending(l => l.IpAddress.ToString()).ToList()
+                : filteredLeases.OrderBy(l => l.IpAddress.ToString()).ToList(),
+            "MacAddress" => sortDescending 
+                ? filteredLeases.OrderByDescending(l => l.MacAddress).ToList()
+                : filteredLeases.OrderBy(l => l.MacAddress).ToList(),
+            "HostName" => sortDescending 
+                ? filteredLeases.OrderByDescending(l => l.HostName ?? "").ToList()
+                : filteredLeases.OrderBy(l => l.HostName ?? "").ToList(),
+            "Status" => sortDescending 
+                ? filteredLeases.OrderByDescending(l => l.Status).ToList()
+                : filteredLeases.OrderBy(l => l.Status).ToList(),
+            "LeaseStart" => sortDescending 
+                ? filteredLeases.OrderByDescending(l => l.LeaseStart).ToList()
+                : filteredLeases.OrderBy(l => l.LeaseStart).ToList(),
+            "LeaseExpiration" => sortDescending 
+                ? filteredLeases.OrderByDescending(l => l.LeaseExpiration).ToList()
+                : filteredLeases.OrderBy(l => l.LeaseExpiration).ToList(),
+            _ => filteredLeases
+        };
+
+        // Calculate pagination
+        totalPages = (int)Math.Ceiling((double)filteredLeases.Count / pageSize);
+        currentPage = Math.Min(currentPage, Math.Max(1, totalPages));
+
+        // Get current page data
+        currentPageLeases = filteredLeases
+            .Skip((currentPage - 1) * pageSize)
+            .Take(pageSize)
+            .ToList();
+    }
+
+    private void OnSearchChanged()
+    {
+        currentPage = 1;
+        ApplyFiltersAndSorting();
+    }
+
+    private void OnStatusFilterChanged(ChangeEventArgs e)
+    {
+        statusFilter = e.Value?.ToString() ?? string.Empty;
+        currentPage = 1;
+        ApplyFiltersAndSorting();
+        StateHasChanged();
+    }
+
+    private void OnSortColumnChanged(ChangeEventArgs e)
+    {
+        var newSortColumn = e.Value?.ToString() ?? "IpAddress";
+        if (sortColumn == newSortColumn)
+        {
+            sortDescending = !sortDescending;
+        }
+        else
+        {
+            sortColumn = newSortColumn;
+            sortDescending = false;
+        }
+        ApplyFiltersAndSorting();
+        StateHasChanged();
+    }
+
+    private void SortBy(string column)
+    {
+        if (sortColumn == column)
+        {
+            sortDescending = !sortDescending;
+        }
+        else
+        {
+            sortColumn = column;
+            sortDescending = false;
+        }
+        ApplyFiltersAndSorting();
+    }
+
+    private void GoToPage(int page)
+    {
+        currentPage = Math.Max(1, Math.Min(page, totalPages));
+        ApplyFiltersAndSorting();
+    }
+
+    private void ClearSearch()
+    {
+        searchTerm = string.Empty;
+        OnSearchChanged();
+    }
+
+    private void ClearFilters()
+    {
+        searchTerm = string.Empty;
+        statusFilter = string.Empty;
+        OnSearchChanged();
+    }
+
+    // Selection methods
+    private void ToggleSelection(DhcpLease lease)
+    {
+        if (selectedLeases.Contains(lease))
+        {
+            selectedLeases.Remove(lease);
+        }
+        else
+        {
+            selectedLeases.Add(lease);
+        }
+    }
+
+    private void ToggleSelectAll(ChangeEventArgs e)
+    {
+        var isChecked = (bool?)e.Value ?? false;
+        if (isChecked)
+        {
+            selectedLeases.UnionWith(currentPageLeases);
+        }
+        else
+        {
+            foreach (var lease in currentPageLeases)
+            {
+                selectedLeases.Remove(lease);
+            }
+        }
+    }
+
+    private void ClearSelection()
+    {
+        selectedLeases.Clear();
+    }
+
+    // Lease management methods
+    private void ViewLeaseDetails(DhcpLease lease)
+    {
+        selectedLease = lease;
+        showLeaseModal = true;
+    }
+
+    private void CloseLeaseModal()
+    {
+        showLeaseModal = false;
+        selectedLease = null;
+    }
+
+    private async Task RenewLease(DhcpLease lease)
+    {
+        // Close modal first
+        CloseLeaseModal();
+        
+        try
+        {
+            var leaseGrain = GrainFactory.GetGrain<IDhcpLeaseGrain>(lease.IpAddress.ToString());
+            
+            // Create a renewed lease with extended expiration
+            var renewedLease = new DhcpLease
+            {
+                IpAddress = lease.IpAddress,
+                MacAddress = lease.MacAddress,
+                HostName = lease.HostName,
+                LeaseStart = DateTime.UtcNow,
+                LeaseDuration = lease.LeaseDuration,
+                Status = LeaseStatus.Renewed,
+                Subnet = lease.Subnet,
+                Router = lease.Router,
+                DhcpServer = lease.DhcpServer,
+                DnsServers = lease.DnsServers
+            };
+            
+            var success = await leaseGrain.UpdateLease(renewedLease);
+            
+            if (success)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Lease for {lease.IpAddress} has been successfully renewed.");
+                await RefreshLeases(); // Refresh the data
+            }
+            else
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Failed to renew lease for {lease.IpAddress}.");
+            }
+        }
+        catch (Exception ex)
+        {
+            await JSRuntime.InvokeVoidAsync("alert", $"Error renewing lease for {lease.IpAddress}: {ex.Message}");
+        }
+    }
+
+    private async Task RevokeLease(DhcpLease lease)
+    {
+        // Close modal first
+        CloseLeaseModal();
+        
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to revoke the lease for {lease.IpAddress}?");
+        if (confirmed)
+        {
+            try
+            {
+                var leaseGrain = GrainFactory.GetGrain<IDhcpLeaseGrain>(lease.IpAddress.ToString());
+                var success = await leaseGrain.RevokeLease();
+                
+                if (success)
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", $"Lease for {lease.IpAddress} has been successfully revoked.");
+                    await RefreshLeases(); // Refresh the data
+                }
+                else
+                {
+                    await JSRuntime.InvokeVoidAsync("alert", $"Failed to revoke lease for {lease.IpAddress}.");
+                }
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Error revoking lease for {lease.IpAddress}: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task BulkRenewSelected()
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to renew {selectedLeases.Count} selected lease(s)?");
+        if (confirmed)
+        {
+            try
+            {
+                var successCount = 0;
+                var failCount = 0;
+                
+                foreach (var lease in selectedLeases.ToList())
+                {
+                    try
+                    {
+                        var leaseGrain = GrainFactory.GetGrain<IDhcpLeaseGrain>(lease.IpAddress.ToString());
+                        
+                        // Create a renewed lease with extended expiration
+                        var renewedLease = new DhcpLease
+                        {
+                            IpAddress = lease.IpAddress,
+                            MacAddress = lease.MacAddress,
+                            HostName = lease.HostName,
+                            LeaseStart = DateTime.UtcNow,
+                            LeaseDuration = lease.LeaseDuration,
+                            Status = LeaseStatus.Renewed,
+                            Subnet = lease.Subnet,
+                            Router = lease.Router,
+                            DhcpServer = lease.DhcpServer,
+                            DnsServers = lease.DnsServers
+                        };
+                        
+                        var success = await leaseGrain.UpdateLease(renewedLease);
+                        if (success) successCount++;
+                        else failCount++;
+                    }
+                    catch
+                    {
+                        failCount++;
+                    }
+                }
+                
+                await JSRuntime.InvokeVoidAsync("alert", $"Bulk renewal completed: {successCount} successful, {failCount} failed.");
+                selectedLeases.Clear();
+                await RefreshLeases();
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Error during bulk renewal: {ex.Message}");
+            }
+        }
+    }
+
+    private async Task BulkRevokeSelected()
+    {
+        var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to revoke {selectedLeases.Count} selected lease(s)?");
+        if (confirmed)
+        {
+            try
+            {
+                var successCount = 0;
+                var failCount = 0;
+                
+                foreach (var lease in selectedLeases.ToList())
+                {
+                    try
+                    {
+                        var leaseGrain = GrainFactory.GetGrain<IDhcpLeaseGrain>(lease.IpAddress.ToString());
+                        var success = await leaseGrain.RevokeLease();
+                        if (success) successCount++;
+                        else failCount++;
+                    }
+                    catch
+                    {
+                        failCount++;
+                    }
+                }
+                
+                await JSRuntime.InvokeVoidAsync("alert", $"Bulk revocation completed: {successCount} successful, {failCount} failed.");
+                selectedLeases.Clear();
+                await RefreshLeases();
+            }
+            catch (Exception ex)
+            {
+                await JSRuntime.InvokeVoidAsync("alert", $"Error during bulk revocation: {ex.Message}");
+            }
+        }
+    }
+
+    private string GetStatusBadgeClass(LeaseStatus status)
+    {
+        return status switch
+        {
+            LeaseStatus.Active => "bg-success",
+            LeaseStatus.Expired => "bg-danger",
+            LeaseStatus.Renewed => "bg-info",
+            _ => "bg-secondary"
+        };
+    }
+}

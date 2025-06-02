@@ -1,0 +1,194 @@
+@using qt.qsp.dhcp.Server.Grains.DhcpManager
+
+@if (IsVisible && Lease != null)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">
+                        <i class="bi bi-info-circle"></i> Lease Details
+                    </h5>
+                    <button type="button" class="btn-close" @onclick="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="row">
+                        <div class="col-md-6">
+                            <h6 class="fw-bold text-muted">Client Information</h6>
+                            <table class="table table-sm table-borderless">
+                                <tr>
+                                    <td class="fw-semibold">IP Address:</td>
+                                    <td><code>@Lease.IpAddress</code></td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold">MAC Address:</td>
+                                    <td><code>@Lease.MacAddress</code></td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold">Hostname:</td>
+                                    <td>@(Lease.HostName ?? "Not provided")</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold">Status:</td>
+                                    <td>
+                                        <span class="badge @GetStatusBadgeClass(Lease.Status)">
+                                            @Lease.Status
+                                        </span>
+                                        @if (Lease.IsExpired())
+                                        {
+                                            <span class="badge bg-warning ms-1">Expired</span>
+                                        }
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                        <div class="col-md-6">
+                            <h6 class="fw-bold text-muted">Lease Timing</h6>
+                            <table class="table table-sm table-borderless">
+                                <tr>
+                                    <td class="fw-semibold">Lease Start:</td>
+                                    <td>@Lease.LeaseStart.ToString("yyyy-MM-dd HH:mm:ss")</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold">Duration:</td>
+                                    <td>@FormatDuration(Lease.LeaseDuration)</td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold">Expires:</td>
+                                    <td>
+                                        @Lease.LeaseExpiration.ToString("yyyy-MM-dd HH:mm:ss")
+                                        @if (!Lease.IsExpired())
+                                        {
+                                            <small class="text-muted">(@GetTimeRemaining())</small>
+                                        }
+                                    </td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold">Time Remaining:</td>
+                                    <td>
+                                        @if (Lease.IsExpired())
+                                        {
+                                            <span class="text-danger">Expired @FormatTimeAgo(Lease.LeaseExpiration)</span>
+                                        }
+                                        else
+                                        {
+                                            <span class="text-success">@GetTimeRemaining()</span>
+                                        }
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                    
+                    <hr />
+                    
+                    <div class="row">
+                        <div class="col-12">
+                            <h6 class="fw-bold text-muted">Network Configuration</h6>
+                            <table class="table table-sm table-borderless">
+                                <tr>
+                                    <td class="fw-semibold" style="width: 200px;">Subnet Mask:</td>
+                                    <td><code>@(Lease.Subnet?.ToString() ?? "Not configured")</code></td>
+                                    <td class="fw-semibold" style="width: 200px;">Router/Gateway:</td>
+                                    <td><code>@(Lease.Router?.ToString() ?? "Not configured")</code></td>
+                                </tr>
+                                <tr>
+                                    <td class="fw-semibold">DHCP Server:</td>
+                                    <td><code>@(Lease.DhcpServer?.ToString() ?? "Not configured")</code></td>
+                                    <td class="fw-semibold">DNS Servers:</td>
+                                    <td>
+                                        @if (Lease.DnsServers.Any())
+                                        {
+                                            @foreach (var dns in Lease.DnsServers)
+                                            {
+                                                <code class="me-2">@dns</code>
+                                            }
+                                        }
+                                        else
+                                        {
+                                            <span class="text-muted">Not configured</span>
+                                        }
+                                    </td>
+                                </tr>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-warning" @onclick="OnRenewClicked">
+                        <i class="bi bi-arrow-clockwise"></i> Renew Lease
+                    </button>
+                    <button type="button" class="btn btn-outline-danger" @onclick="OnRevokeClicked">
+                        <i class="bi bi-x-circle"></i> Revoke Lease
+                    </button>
+                    <button type="button" class="btn btn-secondary" @onclick="Close">Close</button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    [Parameter] public bool IsVisible { get; set; }
+    [Parameter] public DhcpLease? Lease { get; set; }
+    [Parameter] public EventCallback OnClose { get; set; }
+    [Parameter] public EventCallback<DhcpLease> OnRenew { get; set; }
+    [Parameter] public EventCallback<DhcpLease> OnRevoke { get; set; }
+
+    private async Task Close()
+    {
+        IsVisible = false;
+        await OnClose.InvokeAsync();
+    }
+
+    private async Task OnRenewClicked()
+    {
+        if (Lease != null)
+        {
+            await OnRenew.InvokeAsync(Lease);
+        }
+    }
+
+    private async Task OnRevokeClicked()
+    {
+        if (Lease != null)
+        {
+            await OnRevoke.InvokeAsync(Lease);
+        }
+    }
+
+    private string GetStatusBadgeClass(LeaseStatus status)
+    {
+        return status switch
+        {
+            LeaseStatus.Active => "bg-success",
+            LeaseStatus.Expired => "bg-danger",
+            LeaseStatus.Renewed => "bg-info",
+            _ => "bg-secondary"
+        };
+    }
+
+    private string FormatDuration(TimeSpan duration)
+    {
+        if (duration.TotalDays >= 1)
+            return $"{(int)duration.TotalDays} day(s), {duration.Hours} hour(s)";
+        else if (duration.TotalHours >= 1)
+            return $"{(int)duration.TotalHours} hour(s), {duration.Minutes} minute(s)";
+        else
+            return $"{duration.Minutes} minute(s)";
+    }
+
+    private string GetTimeRemaining()
+    {
+        if (Lease == null || Lease.IsExpired()) return "";
+        
+        var remaining = Lease.LeaseExpiration - DateTime.UtcNow;
+        return FormatDuration(remaining);
+    }
+
+    private string FormatTimeAgo(DateTime dateTime)
+    {
+        var timeAgo = DateTime.UtcNow - dateTime;
+        return FormatDuration(timeAgo) + " ago";
+    }
+}
