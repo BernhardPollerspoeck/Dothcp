@@ -16,7 +16,8 @@ public class DhcpManagerGrain(
 	ILogger<DhcpManagerGrain> logger,
 	IOfferGeneratorService offerGeneratorService,
 	ISettingsLoaderService settingsLoader,
-	INetworkUtilityService networkUtilityService)
+	INetworkUtilityService networkUtilityService,
+	IReservationService reservationService)
 	: Grain, IDhcpManagerGrain
 {
 	#region IDhcpManagerGrain
@@ -39,6 +40,13 @@ public class DhcpManagerGrain(
 	#region message handling
 	public async Task<DhcpMessage?> HandleDiscover(DhcpMessage message)
 	{
+		//check reservations first - highest priority
+		var offerFromReservation = await offerGeneratorService.TryCreateOfferFromReservation(message, state, this.GetPrimaryKeyString());
+		if (offerFromReservation is { Item1: true, Item2: not null })
+		{
+			return offerFromReservation.Item2;
+		}
+
 		//get previously assigned ip
 		var offerFromPreviousIp = await offerGeneratorService.TryCreateOfferFromPreviousIp(message, state, this.GetPrimaryKeyString());
 		if (offerFromPreviousIp is { Item1: true, Item2: not null })
@@ -313,6 +321,19 @@ public class DhcpManagerGrain(
 		if (networkUtilityService.IsReservedIp(requestedIp, networkAddress, broadcastAddress))
 		{
 			return CreateNakMessage(message, $"Requested IP {requestedIp} is a reserved address (network or broadcast)");
+		}
+		
+		// Check if this IP is reserved for a different MAC address
+		var clientMacAddress = BitConverter.ToString(message.ClientHardwareAdress).Replace("-", ":");
+		var existingReservation = await reservationService.GetReservationByIpAsync(IPAddress.Parse(requestedIp));
+		if (existingReservation != null && existingReservation.IsActive)
+		{
+			if (!existingReservation.IsValidForMac(clientMacAddress))
+			{
+				logger.LogWarning("Client {clientId} with MAC {clientMac} requested IP {requestedIp} which is reserved for MAC {reservedMac}", 
+					this.GetPrimaryKeyString(), clientMacAddress, requestedIp, existingReservation.MacAddress);
+				return CreateNakMessage(message, $"IP {requestedIp} is reserved for a different client");
+			}
 		}
 		
 		// Check if the address is available or already offered to this client
