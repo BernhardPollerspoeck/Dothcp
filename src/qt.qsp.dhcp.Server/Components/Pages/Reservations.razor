@@ -1,0 +1,482 @@
+@page "/reservations"
+@using qt.qsp.dhcp.Server.Services
+@using qt.qsp.dhcp.Server.Grains.DhcpManager
+@using System.Net
+@inject IReservationService ReservationService
+@inject IJSRuntime JSRuntime
+
+<PageTitle>IP Reservations - DHCP Server</PageTitle>
+
+<div class="container-fluid">
+    <div class="row mb-4">
+        <div class="col">
+            <h1 class="h3">DHCP IP Reservations</h1>
+            <p class="text-muted">Manage static IP address reservations for specific MAC addresses</p>
+        </div>
+        <div class="col-auto">
+            <div class="btn-group me-2" role="group">
+                <button class="btn btn-outline-secondary" @onclick="ExportReservations">
+                    <i class="bi bi-download me-2"></i>Export
+                </button>
+                <label class="btn btn-outline-secondary" for="importFile">
+                    <i class="bi bi-upload me-2"></i>Import
+                    <input type="file" id="importFile" style="display: none;" accept=".json" @onchange="OnImportFileSelected" />
+                </label>
+            </div>
+            <button class="btn btn-success me-2" @onclick="ShowAddReservationModal">
+                <i class="bi bi-plus-circle me-2"></i>Add Reservation
+            </button>
+            <button class="btn btn-primary" @onclick="RefreshReservations" disabled="@isLoading">
+                @if (isLoading)
+                {
+                    <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                }
+                else
+                {
+                    <i class="bi bi-arrow-clockwise me-2"></i>
+                }
+                Refresh
+            </button>
+        </div>
+    </div>
+
+    @if (isLoading && reservations == null)
+    {
+        <div class="text-center py-5">
+            <div class="spinner-border" role="status">
+                <span class="visually-hidden">Loading...</span>
+            </div>
+            <div class="mt-2">Loading reservations...</div>
+        </div>
+    }
+    else if (reservations != null)
+    {
+        <!-- Reservation Statistics -->
+        <div class="row mb-3">
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title">@reservations.Count</h5>
+                        <p class="card-text text-muted">Total Reservations</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-success">@reservations.Count(r => r.IsActive)</h5>
+                        <p class="card-text text-muted">Active</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card text-center">
+                    <div class="card-body">
+                        <h5 class="card-title text-secondary">@reservations.Count(r => !r.IsActive)</h5>
+                        <p class="card-text text-muted">Inactive</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Reservations Table -->
+        <div class="card">
+            <div class="card-body">
+                @if (reservations.Any())
+                {
+                    <div class="table-responsive">
+                        <table class="table table-hover table-sm">
+                            <thead>
+                                <tr>
+                                    <th>IP Address</th>
+                                    <th>MAC Address</th>
+                                    <th>Description</th>
+                                    <th>Status</th>
+                                    <th>Created</th>
+                                    <th>Last Used</th>
+                                    <th>Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                @foreach (var reservation in reservations)
+                                {
+                                    <tr>
+                                        <td>
+                                            <code>@reservation.IpAddress</code>
+                                        </td>
+                                        <td>
+                                            <code>@reservation.MacAddress</code>
+                                        </td>
+                                        <td>@(string.IsNullOrEmpty(reservation.Description) ? "-" : reservation.Description)</td>
+                                        <td>
+                                            <span class="badge @(reservation.IsActive ? "bg-success" : "bg-secondary")">
+                                                @(reservation.IsActive ? "Active" : "Inactive")
+                                            </span>
+                                        </td>
+                                        <td>@reservation.CreatedAt.ToString("MM/dd/yyyy HH:mm")</td>
+                                        <td>@(reservation.LastUsed?.ToString("MM/dd/yyyy HH:mm") ?? "Never")</td>
+                                        <td>
+                                            <div class="btn-group btn-group-sm" role="group">
+                                                <button class="btn btn-outline-primary btn-sm" @onclick="() => EditReservation(reservation)" title="Edit Reservation">
+                                                    <i class="bi bi-pencil"></i>
+                                                </button>
+                                                @if (reservation.IsActive)
+                                                {
+                                                    <button class="btn btn-outline-warning btn-sm" @onclick="() => DeactivateReservation(reservation)" title="Deactivate">
+                                                        <i class="bi bi-pause"></i>
+                                                    </button>
+                                                }
+                                                else
+                                                {
+                                                    <button class="btn btn-outline-success btn-sm" @onclick="() => ActivateReservation(reservation)" title="Activate">
+                                                        <i class="bi bi-play"></i>
+                                                    </button>
+                                                }
+                                                <button class="btn btn-outline-danger btn-sm" @onclick="() => DeleteReservation(reservation)" title="Delete Reservation">
+                                                    <i class="bi bi-trash"></i>
+                                                </button>
+                                            </div>
+                                        </td>
+                                    </tr>
+                                }
+                            </tbody>
+                        </table>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center py-4 text-muted">
+                        <i class="bi bi-info-circle display-6"></i>
+                        <div class="mt-2">No reservations configured</div>
+                        <button class="btn btn-success mt-2" @onclick="ShowAddReservationModal">
+                            <i class="bi bi-plus-circle me-2"></i>Add First Reservation
+                        </button>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-warning" role="alert">
+            <i class="bi bi-exclamation-triangle"></i>
+            Unable to load reservation data. Please try refreshing the page.
+        </div>
+    }
+</div>
+
+<!-- Add/Edit Reservation Modal -->
+@if (showModal)
+{
+    <div class="modal show d-block" tabindex="-1" style="background-color: rgba(0,0,0,0.5);">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">@(editingReservation == null ? "Add New Reservation" : "Edit Reservation")</h5>
+                    <button type="button" class="btn-close" @onclick="CloseModal"></button>
+                </div>
+                <div class="modal-body">
+                    @if (!string.IsNullOrEmpty(modalErrorMessage))
+                    {
+                        <div class="alert alert-danger">
+                            @modalErrorMessage
+                        </div>
+                    }
+                    
+                    <form>
+                        <div class="mb-3">
+                            <label for="ipAddress" class="form-label">IP Address *</label>
+                            <input type="text" class="form-control" id="ipAddress" @bind="modalIpAddress" placeholder="192.168.1.100">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="macAddress" class="form-label">MAC Address *</label>
+                            <input type="text" class="form-control" id="macAddress" @bind="modalMacAddress" placeholder="00:11:22:33:44:55">
+                        </div>
+                        
+                        <div class="mb-3">
+                            <label for="description" class="form-label">Description</label>
+                            <input type="text" class="form-control" id="description" @bind="modalDescription" placeholder="e.g., Server, Printer, etc.">
+                        </div>
+                        
+                        <div class="mb-3 form-check">
+                            <input type="checkbox" class="form-check-input" id="isActive" @bind="modalIsActive">
+                            <label class="form-check-label" for="isActive">
+                                Active
+                            </label>
+                        </div>
+                    </form>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" @onclick="CloseModal">Cancel</button>
+                    <button type="button" class="btn btn-primary" @onclick="SaveReservation" disabled="@isSaving">
+                        @if (isSaving)
+                        {
+                            <span class="spinner-border spinner-border-sm me-2" role="status" aria-hidden="true"></span>
+                        }
+                        @(editingReservation == null ? "Add Reservation" : "Update Reservation")
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+}
+
+@code {
+    private List<DhcpReservation>? reservations;
+    private bool isLoading = true;
+
+    // Modal state
+    private bool showModal = false;
+    private bool isSaving = false;
+    private DhcpReservation? editingReservation = null;
+    private string modalErrorMessage = string.Empty;
+    
+    // Modal form data
+    private string modalIpAddress = string.Empty;
+    private string modalMacAddress = string.Empty;
+    private string modalDescription = string.Empty;
+    private bool modalIsActive = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await RefreshReservations();
+    }
+
+    private async Task RefreshReservations()
+    {
+        isLoading = true;
+        StateHasChanged();
+
+        try
+        {
+            reservations = (await ReservationService.GetAllReservationsAsync()).ToList();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading reservations: {ex.Message}");
+            reservations = null;
+        }
+        finally
+        {
+            isLoading = false;
+            StateHasChanged();
+        }
+    }
+
+    private void ShowAddReservationModal()
+    {
+        editingReservation = null;
+        modalIpAddress = string.Empty;
+        modalMacAddress = string.Empty;
+        modalDescription = string.Empty;
+        modalIsActive = true;
+        modalErrorMessage = string.Empty;
+        showModal = true;
+    }
+
+    private void EditReservation(DhcpReservation reservation)
+    {
+        editingReservation = reservation;
+        modalIpAddress = reservation.IpAddress.ToString();
+        modalMacAddress = reservation.MacAddress;
+        modalDescription = reservation.Description;
+        modalIsActive = reservation.IsActive;
+        modalErrorMessage = string.Empty;
+        showModal = true;
+    }
+
+    private void CloseModal()
+    {
+        showModal = false;
+        editingReservation = null;
+        modalErrorMessage = string.Empty;
+    }
+
+    private async Task SaveReservation()
+    {
+        isSaving = true;
+        modalErrorMessage = string.Empty;
+        StateHasChanged();
+
+        try
+        {
+            // Validate inputs
+            if (string.IsNullOrWhiteSpace(modalIpAddress))
+            {
+                modalErrorMessage = "IP address is required";
+                return;
+            }
+
+            if (string.IsNullOrWhiteSpace(modalMacAddress))
+            {
+                modalErrorMessage = "MAC address is required";
+                return;
+            }
+
+            if (!IPAddress.TryParse(modalIpAddress, out var ipAddress))
+            {
+                modalErrorMessage = "Invalid IP address format";
+                return;
+            }
+
+            var reservation = new DhcpReservation
+            {
+                IpAddress = ipAddress,
+                MacAddress = modalMacAddress.Trim(),
+                Description = modalDescription?.Trim() ?? string.Empty,
+                IsActive = modalIsActive,
+                CreatedAt = editingReservation?.CreatedAt ?? DateTime.UtcNow
+            };
+
+            (bool success, string? errorMessage) result;
+
+            if (editingReservation == null)
+            {
+                result = await ReservationService.AddReservationAsync(reservation);
+            }
+            else
+            {
+                result = await ReservationService.UpdateReservationAsync(reservation);
+            }
+
+            if (result.success)
+            {
+                CloseModal();
+                await RefreshReservations();
+            }
+            else
+            {
+                modalErrorMessage = result.errorMessage ?? "Unknown error occurred";
+            }
+        }
+        catch (Exception ex)
+        {
+            modalErrorMessage = $"Error: {ex.Message}";
+        }
+        finally
+        {
+            isSaving = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeleteReservation(DhcpReservation reservation)
+    {
+        try
+        {
+            var (success, errorMessage) = await ReservationService.DeleteReservationAsync(reservation.IpAddress);
+            
+            if (success)
+            {
+                await RefreshReservations();
+            }
+            else
+            {
+                modalErrorMessage = $"Failed to delete reservation: {errorMessage}";
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            modalErrorMessage = $"Error deleting reservation: {ex.Message}";
+            StateHasChanged();
+        }
+    }
+
+    private async Task ActivateReservation(DhcpReservation reservation)
+    {
+        try
+        {
+            reservation.IsActive = true;
+            var (success, errorMessage) = await ReservationService.UpdateReservationAsync(reservation);
+            
+            if (success)
+            {
+                await RefreshReservations();
+            }
+            else
+            {
+                modalErrorMessage = $"Failed to activate reservation: {errorMessage}";
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            modalErrorMessage = $"Error activating reservation: {ex.Message}";
+            StateHasChanged();
+        }
+    }
+
+    private async Task DeactivateReservation(DhcpReservation reservation)
+    {
+        try
+        {
+            reservation.IsActive = false;
+            var (success, errorMessage) = await ReservationService.UpdateReservationAsync(reservation);
+            
+            if (success)
+            {
+                await RefreshReservations();
+            }
+            else
+            {
+                modalErrorMessage = $"Failed to deactivate reservation: {errorMessage}";
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            modalErrorMessage = $"Error deactivating reservation: {ex.Message}";
+            StateHasChanged();
+        }
+    }
+
+    private async Task ExportReservations()
+    {
+        try
+        {
+            var json = await ReservationService.ExportReservationsAsJsonAsync();
+            var fileName = $"dhcp-reservations-{DateTime.Now:yyyyMMdd-HHmmss}.json";
+            
+            await JSRuntime.InvokeVoidAsync("downloadFile", fileName, "application/json", json);
+        }
+        catch (Exception ex)
+        {
+            modalErrorMessage = $"Error exporting reservations: {ex.Message}";
+            StateHasChanged();
+        }
+    }
+
+    private async Task OnImportFileSelected(ChangeEventArgs e)
+    {
+        try
+        {
+            var file = e.Value?.ToString();
+            if (string.IsNullOrEmpty(file))
+                return;
+
+            // Note: In a real implementation, you would need to read the file content
+            // This is simplified for demonstration purposes
+            var json = await JSRuntime.InvokeAsync<string>("readFileAsText", file);
+            
+            var (success, errorMessage, importedCount) = await ReservationService.ImportReservationsFromJsonAsync(json);
+            
+            if (success)
+            {
+                await RefreshReservations();
+                modalErrorMessage = string.Empty;
+            }
+            else
+            {
+                modalErrorMessage = $"Import failed: {errorMessage}";
+            }
+            StateHasChanged();
+        }
+        catch (Exception ex)
+        {
+            modalErrorMessage = $"Error importing reservations: {ex.Message}";
+            StateHasChanged();
+        }
+    }
+}

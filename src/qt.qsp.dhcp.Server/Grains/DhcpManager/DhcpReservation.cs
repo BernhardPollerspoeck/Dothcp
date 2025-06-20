@@ -1,36 +1,40 @@
-﻿using System.Net;
+using System.Net;
 
 namespace qt.qsp.dhcp.Server.Grains.DhcpManager;
 
 [GenerateSerializer]
-public class DhcpLease
+public class DhcpReservation
 {
-	// Client identification
-	  [Id(0)]
+    // Reservation identification
+    [Id(0)]
     public string MacAddress { get; set; } = string.Empty;
+    
     [Id(1)]
     public string IpAddressString { get; set; } = string.Empty;
+    
     [Id(2)]
-    public string? HostName { get; set; }
-
-    // Lease timing
+    public string Description { get; set; } = string.Empty;
+    
     [Id(3)]
-    public TimeSpan LeaseDuration { get; set; } = TimeSpan.FromDays(1);
+    public bool IsActive { get; set; } = true;
+    
+    // Metadata
     [Id(4)]
-    public DateTime LeaseStart { get; set; } = DateTime.UtcNow;
-	public DateTime LeaseExpiration => LeaseStart.Add(LeaseDuration);
-	
-	// Lease status
-	  [Id(5)]
-    public LeaseStatus Status { get; set; } = LeaseStatus.Active;
-
-    // Network configuration
+    public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
+    
+    [Id(5)]
+    public DateTime? LastUsed { get; set; }
+    
+    // Network configuration (optional overrides)
     [Id(6)]
     public string? SubnetString { get; set; }
+    
     [Id(7)]
     public string? RouterString { get; set; }
+    
     [Id(8)]
     public string? DhcpServerString { get; set; }
+    
     [Id(9)]
     public IList<string> DnsServerStrings { get; set; } = [];
 
@@ -65,21 +69,24 @@ public class DhcpLease
         set => DnsServerStrings = value.Select(ip => ip.ToString()).ToList();
     }
 
-	// Methods for lease management
-	public bool IsExpired() => DateTime.UtcNow > LeaseExpiration;
+    // Methods for reservation management
+    public bool IsValidForMac(string macAddress)
+    {
+        return IsActive && string.Equals(MacAddress, macAddress, StringComparison.OrdinalIgnoreCase);
+    }
 
-	public void Renew(TimeSpan? newDuration = null)
-	{
-		LeaseStart = DateTime.UtcNow;
-		if (newDuration.HasValue)
-		{
-			LeaseDuration = newDuration.Value;
-		}
-		Status = LeaseStatus.Renewed;
-	}
+    public void MarkAsUsed()
+    {
+        LastUsed = DateTime.UtcNow;
+    }
 
-	public void Expire()
-	{
-		Status = LeaseStatus.Expired;
-	}
+    public void Activate()
+    {
+        IsActive = true;
+    }
+
+    public void Deactivate()
+    {
+        IsActive = false;
+    }
 }

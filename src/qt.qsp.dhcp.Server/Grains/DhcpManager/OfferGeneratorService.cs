@@ -15,10 +15,62 @@ public class OfferGeneratorService(
 	ILogger<OfferGeneratorService> logger,
 	ISettingsLoaderService settingsLoader,
 	IGrainFactory grainFactory,
-	INetworkUtilityService networkUtilityService)
+	INetworkUtilityService networkUtilityService,
+	IReservationService reservationService)
 	: IOfferGeneratorService
 {
 	#region IOfferGeneratorService
+	
+	/// <summary>
+	/// Checks if there is an active reservation for the given MAC address and tries to create an offer.
+	/// This should be called first in the allocation process to honor reservations.
+	/// </summary>
+	public async Task<(bool, DhcpMessage?)> TryCreateOfferFromReservation(DhcpMessage message, IPersistentState<ClientInfo> clientInfo, string clientId)
+	{
+		// Get the client's MAC address from the message
+		var macAddress = BitConverter.ToString(message.ClientHardwareAdress).Replace("-", ":");
+		
+		// Check if there's an active reservation for this MAC address
+		var reservation = await reservationService.GetReservationForMacAsync(macAddress);
+		if (reservation != null && reservation.IsActive)
+		{
+			var reservedIp = reservation.IpAddress.ToString();
+			
+			// Check if the reserved IP is available or already assigned to this client
+			var addressInfo = grainFactory.GetGrain<IIpAddressInformationGrain>(reservedIp);
+			var addressStatus = await addressInfo.GetStatus();
+			
+			// If IP is available or already assigned to this client, use the reservation
+			if (addressStatus is { Status: EIpAddressStatus.Available } ||
+				(addressStatus is { Status: EIpAddressStatus.Offered or EIpAddressStatus.Claimed } && 
+				 addressStatus.ClientId == clientId))
+			{
+				await addressInfo.SetStatus(EIpAddressStatus.Offered, clientId);
+				
+				clientInfo.State.Address = reservedIp;
+				clientInfo.State.State = EClientState.Offered;
+				await clientInfo.WriteStateAsync();
+				
+				// Mark the reservation as used
+				var reservationGrain = grainFactory.GetGrain<IDhcpReservationGrain>(reservedIp);
+				await reservationGrain.MarkAsUsed();
+				
+				logger.LogInformation("Create offer for {clientAddress} based on IP reservation for MAC {macAddress}", 
+					reservedIp, macAddress);
+				var offer = await CreateOffer(message, reservedIp);
+				return (offer is not null, offer);
+			}
+			else
+			{
+				// The reserved IP is claimed by another client - this is a conflict that should be logged
+				logger.LogWarning("Reserved IP {reservedIp} for MAC {macAddress} is claimed by another client {otherClientId}", 
+					reservedIp, macAddress, addressStatus.ClientId);
+			}
+		}
+		
+		return (false, null);
+	}
+	
 	public async Task<(bool, DhcpMessage?)> TryCreateOfferFromPreviousIp(DhcpMessage message, IPersistentState<ClientInfo> clientInfo, string clientId)
 	{
 		if (clientInfo.State is { HasAssignedAddress: true, Address: not null })
@@ -129,6 +181,18 @@ public class OfferGeneratorService(
 			if (isInUse)
 			{
 				continue;
+			}
+			
+			// Check if this IP is reserved for a different MAC address
+			var existingReservation = await reservationService.GetReservationByIpAsync(IPAddress.Parse(ipAddress));
+			if (existingReservation != null && existingReservation.IsActive)
+			{
+				// This IP is reserved - skip it unless it's reserved for this client
+				var clientMacAddress = BitConverter.ToString(message.ClientHardwareAdress).Replace("-", ":");
+				if (!existingReservation.IsValidForMac(clientMacAddress))
+				{
+					continue;
+				}
 			}
 			
 			var addressInfo = grainFactory.GetGrain<IIpAddressInformationGrain>(ipAddress);
