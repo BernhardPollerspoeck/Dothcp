@@ -52,6 +52,7 @@ builder.Services.AddTransient<ILeaseGrainSearchService, LeaseGrainSearchService>
 builder.Services.AddTransient<INetworkUtilityService, NetworkUtilityService>();
 builder.Services.AddTransient<IDashboardService, DashboardService>();
 builder.Services.AddSingleton<IDhcpServerService, DhcpServerService>();
+builder.Services.AddScoped<IDhcpMessageHandler, DhcpMessageHandler>();
 
 builder.Services.AddHostedService<NetworkListener>();
 
