@@ -36,7 +36,7 @@ public class OfferGeneratorService(
 		var macAddress = BitConverter.ToString(message.ClientHardwareAdress).Replace("-", ":");
 
 		// Check if there's an active reservation for this MAC address
-		var reservation = await reservationService.GetReservationForMacAsync(macAddress);
+		var reservation = await reservationService.GetReservationByMacAsync(macAddress);
 		if (reservation != null && reservation.IsActive)
 		{
 			var reservedIp = reservation.IpAddress.ToString();
@@ -60,11 +60,11 @@ public class OfferGeneratorService(
 					await clientRepository.AddOrUpdateAsync(clientInfo);
 
 					// Mark the reservation as used
-					var reservationCore = await ((Core.IReservationService)reservationService).GetReservationByIpAsync(IPAddress.Parse(reservedIp));
+					var reservationCore = await reservationService.GetReservationByIpAsync(IPAddress.Parse(reservedIp));
 					if (reservationCore != null)
 					{
 						reservationCore.MarkAsUsed();
-						await ((Core.IReservationService)reservationService).UpdateReservationAsync(reservationCore);
+						await reservationService.UpdateReservationAsync(reservationCore);
 					}
 
 					logger.LogInformation("Create offer for {clientAddress} based on IP reservation for MAC {macAddress}",
@@ -134,6 +134,13 @@ public class OfferGeneratorService(
 			// Get the subnet mask and router settings
 			var subnetMask = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
 			var routerBytes = await settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER);
+
+			if (string.IsNullOrEmpty(subnetMask) || routerBytes == null || routerBytes.Length == 0)
+			{
+				logger.LogError("DHCP subnet or router settings are not configured");
+				return (false, null);
+			}
+
 			var routerIp = string.Join('.', routerBytes);
 
 			// Calculate the network and broadcast addresses
@@ -195,8 +202,20 @@ public class OfferGeneratorService(
 		// Get configuration settings
 		var minAddress = await settingsLoader.GetSetting<byte>(SettingsConstants.DHCP_RANGE_LOW);
 		var maxAddress = await settingsLoader.GetSetting<byte>(SettingsConstants.DHCP_RANGE_HIGH);
-		var routerBytes = (await settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER))[0..^1];
+
+		var routerBytesRaw = await settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER);
+		if (routerBytesRaw == null || routerBytesRaw.Length == 0)
+		{
+			logger.LogError("DHCP_LEASE_ROUTER setting is not configured");
+			return (false, null);
+		}
+		var routerBytes = routerBytesRaw[0..^1];
 		var subnetMask = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
+		if (string.IsNullOrEmpty(subnetMask))
+		{
+			logger.LogError("DHCP_LEASE_SUBNET setting is not configured");
+			return (false, null);
+		}
 
 		var routerBase = string.Join('.', routerBytes);
 
@@ -276,8 +295,15 @@ public class OfferGeneratorService(
 
 		// Get subnet mask and router settings
 		var subnetMask = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
-		var routerIp = string.Join('.', await settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER));
-		
+		var routerBytes = await settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER);
+
+		if (string.IsNullOrEmpty(subnetMask) || routerBytes == null || routerBytes.Length == 0)
+		{
+			throw new InvalidOperationException("DHCP subnet or router settings are not configured. Cannot create DHCP offer.");
+		}
+
+		var routerIp = string.Join('.', routerBytes);
+
 		// Calculate broadcast address
 		var broadcastAddress = networkUtilityService.CalculateBroadcastAddress(routerIp, subnetMask);
 

@@ -45,14 +45,14 @@ public class DhcpMessage
 	{
 		get
 		{
-			if (!HasOption(EOption.AdressRequest))
+			if (!HasOption(EOption.AddressRequest))
 			{
 				return null;
 			}
 			
 			try
 			{
-				var option = Options.First(o => o.Option is EOption.AdressRequest);
+				var option = Options.First(o => o.Option is EOption.AddressRequest);
 				var ipString = string.Join('.', option.Data);
 				return IPAddress.Parse(ipString);
 			}
@@ -66,7 +66,7 @@ public class DhcpMessage
 	public string GetRequestedAddress()
 	{
 		var option = Options
-			.First(o => o.Option is EOption.AdressRequest);
+			.First(o => o.Option is EOption.AddressRequest);
 		return string.Join('.', option.Data);
 	}
 	public string GetClientId()

@@ -25,6 +25,12 @@ public class IpAddressRepository : IIpAddressRepository
 
     public async Task<IpAddressStatus> AddOrUpdateAsync(IpAddressStatus status)
     {
+        if (status == null)
+            throw new ArgumentNullException(nameof(status));
+
+        if (string.IsNullOrEmpty(status.IpAddressString))
+            throw new ArgumentException("IP address cannot be null or empty", nameof(status));
+
         var existing = await GetByIpAddressAsync(status.IpAddressString);
         if (existing != null)
         {

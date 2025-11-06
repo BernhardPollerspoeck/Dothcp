@@ -91,7 +91,7 @@ public class DhcpMessageHandler : IDhcpMessageHandler
         }
 
         // Give the client a requested if available
-        if (message.HasOption(EOption.AdressRequest))
+        if (message.HasOption(EOption.AddressRequest))
         {
             var offerFromRequestedIp = await _offerGeneratorService.TryCreateOfferFromRequestedIp(message, clientInfo, clientId);
             if (offerFromRequestedIp is { Item1: true, Item2: not null })
@@ -118,7 +118,7 @@ public class DhcpMessageHandler : IDhcpMessageHandler
 
         // Get the requested IP address from the message
         string requestedIp;
-        if (message.HasOption(EOption.AdressRequest))
+        if (message.HasOption(EOption.AddressRequest))
         {
             requestedIp = message.GetRequestedAddress();
         }
@@ -248,7 +248,7 @@ public class DhcpMessageHandler : IDhcpMessageHandler
 
         // Get the declined IP address from the message
         string? declinedIp = null;
-        if (message.HasOption(EOption.AdressRequest))
+        if (message.HasOption(EOption.AddressRequest))
         {
             declinedIp = message.GetRequestedAddress();
         }
@@ -294,7 +294,7 @@ public class DhcpMessageHandler : IDhcpMessageHandler
             var bytes = BitConverter.GetBytes(message.ClientIpAdress);
             releasedIp = $"{bytes[0]}.{bytes[1]}.{bytes[2]}.{bytes[3]}";
         }
-        else if (message.HasOption(EOption.AdressRequest))
+        else if (message.HasOption(EOption.AddressRequest))
         {
             releasedIp = message.GetRequestedAddress();
         }

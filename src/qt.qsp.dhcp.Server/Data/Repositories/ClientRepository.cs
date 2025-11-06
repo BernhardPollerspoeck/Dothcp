@@ -24,12 +24,20 @@ public class ClientRepository : IClientRepository
 
     public async Task<ClientInfo> AddOrUpdateAsync(ClientInfo clientInfo)
     {
+        if (clientInfo == null)
+            throw new ArgumentNullException(nameof(clientInfo));
+
+        if (string.IsNullOrEmpty(clientInfo.ClientId))
+            throw new ArgumentException("ClientId cannot be null or empty", nameof(clientInfo));
+
         var existing = await GetByClientIdAsync(clientInfo.ClientId);
         if (existing != null)
         {
             existing.AssignedIpAddress = clientInfo.AssignedIpAddress;
             existing.State = clientInfo.State;
             existing.LastSeen = clientInfo.LastSeen;
+            existing.HostName = clientInfo.HostName;
+            existing.DomainName = clientInfo.DomainName;
             _context.ClientInfos.Update(existing);
         }
         else
