@@ -1,27 +1,27 @@
-using qt.qsp.dhcp.Server.Grains.DhcpManager;
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using qt.qsp.dhcp.Server.Models;
 using System.Net;
-using Xunit;
 
 namespace qt.qsp.dhcp.Server.Tests;
 
+[TestClass]
 public class DhcpLeaseTests
 {
-    [Fact]
+    [TestMethod]
     public void NewLease_HasCorrectDefaultValues()
     {
         // Arrange & Act
         var lease = new DhcpLease();
-        
+
         // Assert
-        Assert.Equal(string.Empty, lease.MacAddress);
-        Assert.Equal(IPAddress.None, lease.IpAddress);
-        Assert.Equal(LeaseStatus.Active, lease.Status);
-        Assert.Equal(TimeSpan.FromDays(1), lease.LeaseDuration);
-        Assert.True(DateTime.UtcNow >= lease.LeaseStart);
-        Assert.True(DateTime.UtcNow <= lease.LeaseStart.AddSeconds(1));
+        Assert.AreEqual(string.Empty, lease.MacAddress);
+        Assert.AreEqual(LeaseStatus.Active, lease.Status);
+        Assert.AreEqual(TimeSpan.FromDays(1), lease.LeaseDuration);
+        Assert.IsTrue(DateTime.UtcNow >= lease.LeaseStart);
+        Assert.IsTrue(DateTime.UtcNow <= lease.LeaseStart.AddSeconds(1));
     }
-    
-    [Fact]
+
+    [TestMethod]
     public void IsExpired_ReturnsFalse_ForNewLease()
     {
         // Arrange
@@ -30,15 +30,15 @@ public class DhcpLeaseTests
             LeaseStart = DateTime.UtcNow,
             LeaseDuration = TimeSpan.FromHours(1)
         };
-        
+
         // Act
         var isExpired = lease.IsExpired();
-        
+
         // Assert
-        Assert.False(isExpired);
+        Assert.IsFalse(isExpired);
     }
-    
-    [Fact]
+
+    [TestMethod]
     public void IsExpired_ReturnsTrue_ForExpiredLease()
     {
         // Arrange
@@ -47,67 +47,67 @@ public class DhcpLeaseTests
             LeaseStart = DateTime.UtcNow.AddHours(-2),
             LeaseDuration = TimeSpan.FromHours(1)
         };
-        
+
         // Act
         var isExpired = lease.IsExpired();
-        
+
         // Assert
-        Assert.True(isExpired);
+        Assert.IsTrue(isExpired);
     }
-    
-    [Fact]
-    public void Renew_UpdatesLeaseStartAndStatus()
+
+    [TestMethod]
+    public void LeaseExpiration_CalculatesCorrectly()
     {
         // Arrange
-        var originalStart = DateTime.UtcNow.AddHours(-1);
+        var leaseStart = DateTime.UtcNow;
+        var leaseDuration = TimeSpan.FromHours(2);
         var lease = new DhcpLease
         {
-            LeaseStart = originalStart,
-            LeaseDuration = TimeSpan.FromHours(2),
-            Status = LeaseStatus.Active
+            LeaseStart = leaseStart,
+            LeaseDuration = leaseDuration
         };
-        
+
         // Act
-        lease.Renew();
-        
+        var expiration = lease.LeaseExpiration;
+
         // Assert
-        Assert.NotEqual(originalStart, lease.LeaseStart);
-        Assert.Equal(LeaseStatus.Renewed, lease.Status);
-        Assert.True(DateTime.UtcNow >= lease.LeaseStart);
-        Assert.True(DateTime.UtcNow <= lease.LeaseStart.AddSeconds(1));
+        Assert.AreEqual(leaseStart + leaseDuration, expiration);
     }
-    
-    [Fact]
-    public void Renew_WithNewDuration_UpdatesDuration()
+
+    [TestMethod]
+    public void IpAddress_ParsesCorrectly()
     {
         // Arrange
-        var originalDuration = TimeSpan.FromHours(2);
-        var newDuration = TimeSpan.FromHours(4);
+        var ipString = "192.168.1.100";
         var lease = new DhcpLease
         {
-            LeaseDuration = originalDuration
+            IpAddressString = ipString
         };
-        
+
         // Act
-        lease.Renew(newDuration);
-        
+        var ipAddress = lease.IpAddress;
+
         // Assert
-        Assert.Equal(newDuration, lease.LeaseDuration);
+        Assert.AreEqual(IPAddress.Parse(ipString), ipAddress);
     }
-    
-    [Fact]
-    public void Expire_SetsStatusToExpired()
+
+    [TestMethod]
+    public void DnsServers_ParsesFromJson()
     {
         // Arrange
+        var dnsServers = new List<string> { "8.8.8.8", "8.8.4.4" };
         var lease = new DhcpLease
         {
-            Status = LeaseStatus.Active
+            DnsServerStringsJson = System.Text.Json.JsonSerializer.Serialize(dnsServers)
         };
-        
+
         // Act
-        lease.Expire();
-        
+        var parsedServers = lease.DnsServers;
+
         // Assert
-        Assert.Equal(LeaseStatus.Expired, lease.Status);
+        Assert.IsNotNull(parsedServers);
+        Assert.AreEqual(2, parsedServers.Count);
+        Assert.AreEqual(IPAddress.Parse("8.8.8.8"), parsedServers[0]);
+        Assert.AreEqual(IPAddress.Parse("8.8.4.4"), parsedServers[1]);
     }
 }
