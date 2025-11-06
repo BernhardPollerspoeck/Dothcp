@@ -333,11 +333,21 @@ public class OfferGeneratorService(
 					break;
 
 				case EOption.HostName:
-					//TODO: maybe later optionsBuilder.AddHostName("Affe mit Waffe");
+					var hostname = incomming.GetHostname();
+					if (!string.IsNullOrEmpty(hostname))
+					{
+						optionsBuilder.AddHostName(hostname);
+						logger.LogDebug("Added hostname '{hostname}' to DHCP offer", hostname);
+					}
 					break;
 
 				case EOption.DomainName:
-					//TODO: later with dns optionsBuilder.AddDomainName("HomeDomain");
+					var domainName = incomming.GetDomainName();
+					if (!string.IsNullOrEmpty(domainName))
+					{
+						optionsBuilder.AddDomainName(domainName);
+						logger.LogDebug("Added domain name '{domainName}' to DHCP offer", domainName);
+					}
 					break;
 
 				case EOption.BroadcastAddressOption:

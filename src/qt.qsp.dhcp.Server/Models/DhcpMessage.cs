@@ -56,8 +56,14 @@ public class DhcpMessage
 				var ipString = string.Join('.', option.Data);
 				return IPAddress.Parse(ipString);
 			}
-			catch
+			catch (FormatException)
 			{
+				// Malformed IP address in DHCP option
+				return null;
+			}
+			catch (InvalidOperationException)
+			{
+				// First() throws when sequence is empty
 				return null;
 			}
 		}
@@ -126,8 +132,9 @@ public class DhcpMessage
 			}
 			return result;
 		}
-		catch
+		catch (ArgumentException)
 		{
+			// Invalid IP address data in option
 			return null;
 		}
 	}
@@ -149,8 +156,9 @@ public class DhcpMessage
 			}
 			return result;
 		}
-		catch
+		catch (ArgumentException)
 		{
+			// Invalid IP address data in option
 			return null;
 		}
 	}
@@ -227,11 +235,17 @@ public class DhcpMessage
 					break;
 				}
 			}
-			
+
 			return routes;
 		}
-		catch
+		catch (ArgumentException)
 		{
+			// Invalid route data in classless static route option
+			return null;
+		}
+		catch (IndexOutOfRangeException)
+		{
+			// Malformed classless static route data
 			return null;
 		}
 	}
@@ -266,8 +280,14 @@ public class DhcpMessage
 			
 			return result.ToArray();
 		}
-		catch
+		catch (ArgumentException)
 		{
+			// Invalid DNS name data in search list option
+			return null;
+		}
+		catch (IndexOutOfRangeException)
+		{
+			// Malformed DNS search list data
 			return null;
 		}
 	}

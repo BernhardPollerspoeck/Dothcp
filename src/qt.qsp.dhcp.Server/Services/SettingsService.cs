@@ -10,7 +10,20 @@ public class SettingsService(IConfigurationService configurationService, INetwor
 	public async Task<TResult> GetSettingAsync<TResult>(string key)
 	{
 		var value = await configurationService.GetSettingAsync<TResult>(key);
-		return value ?? default!;
+
+		// Allow null for optional settings
+		if (value == null)
+		{
+			// DNS and NTP servers are optional
+			if (key == SettingsConstants.DHCP_LEASE_DNS || key == SettingsConstants.DHCP_LEASE_NTP_SERVERS)
+			{
+				return default!;
+			}
+
+			throw new InvalidOperationException($"Required setting '{key}' is not configured. Please configure it in the Settings page.");
+		}
+
+		return value;
 	}
 
 	public Task SetSettingAsync(string key, string value)
@@ -27,8 +40,8 @@ public class SettingsService(IConfigurationService configurationService, INetwor
 	{
 		if (string.IsNullOrWhiteSpace(value))
 		{
-			// DNS is optional, so empty/null is valid
-			return key == SettingsConstants.DHCP_LEASE_DNS;
+			// DNS and NTP servers are optional, empty/null is valid
+			return key == SettingsConstants.DHCP_LEASE_DNS || key == SettingsConstants.DHCP_LEASE_NTP_SERVERS;
 		}
 
 		return key switch
@@ -41,6 +54,7 @@ public class SettingsService(IConfigurationService configurationService, INetwor
 			SettingsConstants.DHCP_LEASE_SUBNET => IsValidSubnetMask(value),
 			SettingsConstants.DHCP_LEASE_ROUTER => IsValidIpAddress(value),
 			SettingsConstants.DHCP_LEASE_DNS => ValidateDnsServers(value),
+			SettingsConstants.DHCP_LEASE_NTP_SERVERS => ValidateNtpServers(value),
 			_ => true // Allow unknown settings for extensibility
 		};
 	}
@@ -58,7 +72,16 @@ public class SettingsService(IConfigurationService configurationService, INetwor
 		var servers = dnsServers.Split(';', StringSplitOptions.RemoveEmptyEntries);
 		return servers.All(IsValidIpAddress);
 	}
-	
+
+	private static bool ValidateNtpServers(string ntpServers)
+	{
+		if (string.IsNullOrWhiteSpace(ntpServers))
+			return true; // NTP is optional
+
+		var servers = ntpServers.Split(';', StringSplitOptions.RemoveEmptyEntries);
+		return servers.All(IsValidIpAddress);
+	}
+
 	private static bool IsValidSubnetMask(string subnetMask)
 	{
 		if (!IPAddress.TryParse(subnetMask, out var ipAddress))

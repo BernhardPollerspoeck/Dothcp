@@ -100,9 +100,15 @@ public class DashboardService : IDashboardService
             var binaryString = string.Concat(bytes.Select(b => Convert.ToString(b, 2).PadLeft(8, '0')));
             return binaryString.Count(c => c == '1');
         }
-        catch
+        catch (FormatException ex)
         {
+            _logger.LogWarning(ex, "Invalid subnet mask format: {subnetMask}, defaulting to /24", subnetMask);
             return 24; // Default to /24 if we can't parse
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error parsing subnet mask: {subnetMask}", subnetMask);
+            return 24;
         }
     }
 
