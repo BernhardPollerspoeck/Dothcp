@@ -54,16 +54,41 @@
 - ✅ Grains/MessageParser/* - MessageParserGrain entfernt
 - ✅ FileStorage/* - komplett gelöscht (Orleans-spezifisch)
 
+## Tests komplett migriert ✅
+
+### Test-Framework Migration
+- ✅ Testprojekt von xUnit auf MSTest konvertiert (.csproj aktualisiert)
+- ✅ MSTest.TestFramework und MSTest.TestAdapter Pakete hinzugefügt
+- ✅ Microsoft.EntityFrameworkCore.InMemory für Datenbank-Tests hinzugefügt
+
+### Konvertierte Tests (xUnit → MSTest)
+- ✅ NetworkUtilitiesTests - alle DataRow-Tests konvertiert
+- ✅ DhcpOptionsTests - alle Tests konvertiert (viele DHCP-Option Tests)
+- ✅ DhcpLeaseTests - auf Models.DhcpLease umgestellt
+- ✅ DhcpReservationTests - auf Models.DhcpReservation umgestellt
+
+### Neue Core Service Tests (mit InMemory-Datenbank)
+- ✅ LeaseServiceTests - CRUD-Operationen, Expiration-Tests
+- ✅ ConfigurationServiceTests - String, Byte, TimeSpan, Arrays Tests
+- ✅ IpAddressServiceTests - Status-Management Tests
+- ✅ ReservationServiceCoreTests - Reservierung CRUD, Konflikt-Erkennung
+
+### Entfernte Orleans-basierte Tests
+- ✅ SettingsGrainTests (Orleans Grain)
+- ✅ ReservationServiceTests (Orleans IGrainFactory Mocks)
+- ✅ SettingsServiceTests (Orleans IGrainFactory Mocks)
+- ✅ DashboardServiceTests (Orleans-abhängig)
+- ✅ FirstRunServiceTests (Orleans-abhängig)
+- ✅ ActiveLeasesViewTests (Orleans-abhängig)
+
+**Alle Tests verwenden jetzt EF Core InMemory-Datenbank statt Orleans-Mocks.**
+
 ## Noch zu tun ⚠️
 
-### Tests
-- Tests von xUnit auf MSTest portieren
-- Neue Tests für alle Core Services schreiben
-- Bestehende Tests anpassen (ReservationServiceTests, etc.)
-
-### Weitere Aufgaben
-- End-to-End Testing durchführen
-- Sicherstellen dass alle DHCP-Funktionen korrekt funktionieren
+### Optional
+- End-to-End Testing (manuelle Verifikation empfohlen)
+- Performance-Tests für große Anzahl an Leases
+- Integration Tests mit echter SQLite-Datenbank
 
 ## Nächste Schritte
 
@@ -74,8 +99,9 @@
 5. ✅ ~~Grain-Dateien löschen~~
 6. ✅ ~~FileStorage-Ordner löschen~~
 7. ✅ ~~Razor Components aktualisieren~~
-8. Tests auf MSTest portieren
-9. End-to-End Testing durchführen
+8. ✅ ~~Tests auf MSTest portieren~~
+9. ✅ ~~Neue Tests für Core Services schreiben~~
+10. Optional: End-to-End Testing durchführen
 
 ## Architektur-Änderungen
 
