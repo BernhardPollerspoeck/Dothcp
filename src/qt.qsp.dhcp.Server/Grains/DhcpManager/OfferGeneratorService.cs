@@ -1,11 +1,11 @@
-using Orleans.Runtime;
 using qt.qsp.dhcp.Server.Constants;
-using qt.qsp.dhcp.Server.Grains.IpAddress;
 using qt.qsp.dhcp.Server.Models;
 using qt.qsp.dhcp.Server.Models.Enumerations;
 using qt.qsp.dhcp.Server.Models.OptionBuilder;
 using qt.qsp.dhcp.Server.Services;
+using qt.qsp.dhcp.Server.Services.Core;
 using qt.qsp.dhcp.Server.Utilities;
+using qt.qsp.dhcp.Server.Data.Repositories;
 using System.Net;
 using System.Net.Sockets;
 
@@ -14,9 +14,10 @@ namespace qt.qsp.dhcp.Server.Grains.DhcpManager;
 public class OfferGeneratorService(
 	ILogger<OfferGeneratorService> logger,
 	ISettingsLoaderService settingsLoader,
-	IGrainFactory grainFactory,
+	IIpAddressService ipAddressService,
 	INetworkUtilityService networkUtilityService,
-	IReservationService reservationService)
+	IReservationService reservationService,
+	IClientRepository clientRepository)
 	: IOfferGeneratorService
 {
 	#region IOfferGeneratorService
@@ -25,37 +26,40 @@ public class OfferGeneratorService(
 	/// Checks if there is an active reservation for the given MAC address and tries to create an offer.
 	/// This should be called first in the allocation process to honor reservations.
 	/// </summary>
-	public async Task<(bool, DhcpMessage?)> TryCreateOfferFromReservation(DhcpMessage message, IPersistentState<ClientInfo> clientInfo, string clientId)
+	public async Task<(bool, DhcpMessage?)> TryCreateOfferFromReservation(DhcpMessage message, Models.ClientInfo clientInfo, string clientId)
 	{
 		// Get the client's MAC address from the message
 		var macAddress = BitConverter.ToString(message.ClientHardwareAdress).Replace("-", ":");
-		
+
 		// Check if there's an active reservation for this MAC address
 		var reservation = await reservationService.GetReservationForMacAsync(macAddress);
 		if (reservation != null && reservation.IsActive)
 		{
 			var reservedIp = reservation.IpAddress.ToString();
-			
+
 			// Check if the reserved IP is available or already assigned to this client
-			var addressInfo = grainFactory.GetGrain<IIpAddressInformationGrain>(reservedIp);
-			var addressStatus = await addressInfo.GetStatus();
-			
+			var addressStatus = await ipAddressService.GetStatusAsync(reservedIp);
+
 			// If IP is available or already assigned to this client, use the reservation
-			if (addressStatus is { Status: EIpAddressStatus.Available } ||
-				(addressStatus is { Status: EIpAddressStatus.Offered or EIpAddressStatus.Claimed } && 
-				 addressStatus.ClientId == clientId))
+			if (addressStatus == Models.EIpAddressStatus.Available ||
+				((addressStatus == Models.EIpAddressStatus.Offered || addressStatus == Models.EIpAddressStatus.Claimed) &&
+				 (await ipAddressService.GetIpAddressInfoAsync(reservedIp))?.ClientId == clientId))
 			{
-				await addressInfo.SetStatus(EIpAddressStatus.Offered, clientId);
-				
-				clientInfo.State.Address = reservedIp;
-				clientInfo.State.State = EClientState.Offered;
-				await clientInfo.WriteStateAsync();
-				
+				await ipAddressService.SetStatusAsync(reservedIp, Models.EIpAddressStatus.Offered, clientId);
+
+				clientInfo.AssignedIpAddress = reservedIp;
+				clientInfo.State = EClientState.Offered.ToString();
+				await clientRepository.AddOrUpdateAsync(clientInfo);
+
 				// Mark the reservation as used
-				var reservationGrain = grainFactory.GetGrain<IDhcpReservationGrain>(reservedIp);
-				await reservationGrain.MarkAsUsed();
-				
-				logger.LogInformation("Create offer for {clientAddress} based on IP reservation for MAC {macAddress}", 
+				var reservationCore = await ((Core.IReservationService)reservationService).GetReservationByIpAsync(IPAddress.Parse(reservedIp));
+				if (reservationCore != null)
+				{
+					reservationCore.MarkAsUsed();
+					await ((Core.IReservationService)reservationService).UpdateReservationAsync(reservationCore);
+				}
+
+				logger.LogInformation("Create offer for {clientAddress} based on IP reservation for MAC {macAddress}",
 					reservedIp, macAddress);
 				var offer = await CreateOffer(message, reservedIp);
 				return (offer is not null, offer);
@@ -63,61 +67,64 @@ public class OfferGeneratorService(
 			else
 			{
 				// The reserved IP is claimed by another client - this is a conflict that should be logged
-				logger.LogWarning("Reserved IP {reservedIp} for MAC {macAddress} is claimed by another client {otherClientId}", 
-					reservedIp, macAddress, addressStatus.ClientId);
+				var otherClientId = (await ipAddressService.GetIpAddressInfoAsync(reservedIp))?.ClientId;
+				logger.LogWarning("Reserved IP {reservedIp} for MAC {macAddress} is claimed by another client {otherClientId}",
+					reservedIp, macAddress, otherClientId);
 			}
 		}
-		
+
 		return (false, null);
 	}
 	
-	public async Task<(bool, DhcpMessage?)> TryCreateOfferFromPreviousIp(DhcpMessage message, IPersistentState<ClientInfo> clientInfo, string clientId)
+	public async Task<(bool, DhcpMessage?)> TryCreateOfferFromPreviousIp(DhcpMessage message, Models.ClientInfo clientInfo, string clientId)
 	{
-		if (clientInfo.State is { HasAssignedAddress: true, Address: not null })
+		if (!string.IsNullOrEmpty(clientInfo.AssignedIpAddress))
 		{
-			var previousOfferGrain = grainFactory.GetGrain<IIpAddressInformationGrain>(clientInfo.State.Address);
-			var status = await previousOfferGrain.GetStatus();
-			if (status is { Status: EIpAddressStatus.Claimed or EIpAddressStatus.Offered }
-				&& status.ClientId == clientId)
+			var previousIpAddress = clientInfo.AssignedIpAddress;
+			var status = await ipAddressService.GetStatusAsync(previousIpAddress);
+			var ipInfo = await ipAddressService.GetIpAddressInfoAsync(previousIpAddress);
+
+			if ((status == Models.EIpAddressStatus.Claimed || status == Models.EIpAddressStatus.Offered)
+				&& ipInfo?.ClientId == clientId)
 			{
-				clientInfo.State.Address = previousOfferGrain.GetPrimaryKeyString();
-				clientInfo.State.State = EClientState.Offered;
-				await clientInfo.WriteStateAsync();
+				clientInfo.AssignedIpAddress = previousIpAddress;
+				clientInfo.State = EClientState.Offered.ToString();
+				await clientRepository.AddOrUpdateAsync(clientInfo);
 
-				await previousOfferGrain.SetStatus(EIpAddressStatus.Offered, clientId);
+				await ipAddressService.SetStatusAsync(previousIpAddress, Models.EIpAddressStatus.Offered, clientId);
 
-				logger.LogInformation("Create offer for {clientAddress} based on previously assigned address", clientInfo.State.Address);
-				var offer = await CreateOffer(message, clientInfo.State.Address);
+				logger.LogInformation("Create offer for {clientAddress} based on previously assigned address", previousIpAddress);
+				var offer = await CreateOffer(message, previousIpAddress);
 				return (offer is not null, offer);
 			}
 		}
 		return (false, null);
 	}
 	
-	public async Task<(bool, DhcpMessage?)> TryCreateOfferFromRequestedIp(DhcpMessage message, IPersistentState<ClientInfo> clientInfo, string clientId)
+	public async Task<(bool, DhcpMessage?)> TryCreateOfferFromRequestedIp(DhcpMessage message, Models.ClientInfo clientInfo, string clientId)
 	{
 		// Check if the client has requested a specific IP
 		if (message.RequestedIpAddress != null && !string.IsNullOrEmpty(message.RequestedIpAddress.ToString()))
 		{
 			var requestedIp = message.RequestedIpAddress.ToString();
-			
+
 			// Get the subnet mask and router settings
 			var subnetMask = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
 			var routerBytes = await settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER);
 			var routerIp = string.Join('.', routerBytes);
-			
+
 			// Calculate the network and broadcast addresses
 			var networkAddress = networkUtilityService.CalculateNetworkAddress(routerIp, subnetMask);
 			var broadcastAddress = networkUtilityService.CalculateBroadcastAddress(routerIp, subnetMask);
-			
+
 			// Check if the requested IP is valid and within range
-			if (!networkUtilityService.IsIpInRange(requestedIp, networkAddress, subnetMask) || 
+			if (!networkUtilityService.IsIpInRange(requestedIp, networkAddress, subnetMask) ||
 				networkUtilityService.IsReservedIp(requestedIp, networkAddress, broadcastAddress))
 			{
 				logger.LogWarning("Requested IP {requestedIp} is not in valid range or is reserved", requestedIp);
 				return (false, null);
 			}
-			
+
 			// Check if the requested IP is already in use on the network
 			var isInUse = await networkUtilityService.IsIpInUseAsync(requestedIp);
 			if (isInUse)
@@ -125,64 +132,64 @@ public class OfferGeneratorService(
 				logger.LogWarning("Requested IP {requestedIp} is already in use on the network", requestedIp);
 				return (false, null);
 			}
-			
+
 			// Check if the IP is available in our system
-			var addressInfo = grainFactory.GetGrain<IIpAddressInformationGrain>(requestedIp);
-			var addressStatus = await addressInfo.GetStatus();
-			
-			if (addressStatus is { Status: EIpAddressStatus.Available } ||
-				(addressStatus is { Status: EIpAddressStatus.Offered or EIpAddressStatus.Claimed } && 
-				 addressStatus.ClientId == clientId))
+			var addressStatus = await ipAddressService.GetStatusAsync(requestedIp);
+			var ipInfo = await ipAddressService.GetIpAddressInfoAsync(requestedIp);
+
+			if (addressStatus == Models.EIpAddressStatus.Available ||
+				((addressStatus == Models.EIpAddressStatus.Offered || addressStatus == Models.EIpAddressStatus.Claimed) &&
+				 ipInfo?.ClientId == clientId))
 			{
-				await addressInfo.SetStatus(EIpAddressStatus.Offered, clientId);
-				
-				clientInfo.State.Address = requestedIp;
-				clientInfo.State.State = EClientState.Offered;
-				await clientInfo.WriteStateAsync();
-				
+				await ipAddressService.SetStatusAsync(requestedIp, Models.EIpAddressStatus.Offered, clientId);
+
+				clientInfo.AssignedIpAddress = requestedIp;
+				clientInfo.State = EClientState.Offered.ToString();
+				await clientRepository.AddOrUpdateAsync(clientInfo);
+
 				logger.LogInformation("Create offer for {clientAddress} based on client requested address", requestedIp);
 				var offer = await CreateOffer(message, requestedIp);
 				return (offer is not null, offer);
 			}
-			
+
 			logger.LogWarning("Requested IP {requestedIp} is not available in the system", requestedIp);
 		}
-		
+
 		return (false, null);
 	}
 	
-	public async Task<(bool, DhcpMessage?)> TryCreateOfferFromRandomIp(DhcpMessage message, IPersistentState<ClientInfo> clientInfo, string clientId)
+	public async Task<(bool, DhcpMessage?)> TryCreateOfferFromRandomIp(DhcpMessage message, Models.ClientInfo clientInfo, string clientId)
 	{
 		// Get configuration settings
 		var minAddress = await settingsLoader.GetSetting<byte>(SettingsConstants.DHCP_RANGE_LOW);
 		var maxAddress = await settingsLoader.GetSetting<byte>(SettingsConstants.DHCP_RANGE_HIGH);
 		var routerBytes = (await settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER))[0..^1];
 		var subnetMask = await settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
-		
+
 		var routerBase = string.Join('.', routerBytes);
-		
+
 		// Calculate network and broadcast addresses
 		var networkAddress = networkUtilityService.CalculateNetworkAddress($"{routerBase}.0", subnetMask);
 		var broadcastAddress = networkUtilityService.CalculateBroadcastAddress($"{routerBase}.0", subnetMask);
-		
+
 		// Try to allocate IP sequentially - using a random starting point would be a future enhancement
 		for (var i = minAddress; i <= maxAddress; i++)
 		{
 			var ipAddress = $"{string.Join('.', routerBytes)}.{i}";
-			
+
 			// Skip if this is a reserved address (network or broadcast)
 			if (networkUtilityService.IsReservedIp(ipAddress, networkAddress, broadcastAddress))
 			{
 				continue;
 			}
-			
+
 			// Check if the IP is already in use on the network (ARP probe)
 			var isInUse = await networkUtilityService.IsIpInUseAsync(ipAddress);
 			if (isInUse)
 			{
 				continue;
 			}
-			
+
 			// Check if this IP is reserved for a different MAC address
 			var existingReservation = await reservationService.GetReservationByIpAsync(IPAddress.Parse(ipAddress));
 			if (existingReservation != null && existingReservation.IsActive)
@@ -194,28 +201,27 @@ public class OfferGeneratorService(
 					continue;
 				}
 			}
-			
-			var addressInfo = grainFactory.GetGrain<IIpAddressInformationGrain>(ipAddress);
-			var addressStatus = await addressInfo.GetStatus();
-			
-			if (addressStatus is not { Status: EIpAddressStatus.Available })
+
+			var addressStatus = await ipAddressService.GetStatusAsync(ipAddress);
+
+			if (addressStatus != Models.EIpAddressStatus.Available)
 			{
 				continue;
 			}
 
 			// Mark the address as offered
-			await addressInfo.SetStatus(EIpAddressStatus.Offered, clientId);
-			
+			await ipAddressService.SetStatusAsync(ipAddress, Models.EIpAddressStatus.Offered, clientId);
+
 			// Update client information
-			clientInfo.State.Address = ipAddress;
-			clientInfo.State.State = EClientState.Offered;
-			await clientInfo.WriteStateAsync();
+			clientInfo.AssignedIpAddress = ipAddress;
+			clientInfo.State = EClientState.Offered.ToString();
+			await clientRepository.AddOrUpdateAsync(clientInfo);
 
 			logger.LogInformation("Create offer for {clientAddress} based on random address", ipAddress);
 			var offer = await CreateOffer(message, ipAddress);
 			return (offer is not null, offer);
 		}
-		
+
 		logger.LogWarning("No available IP addresses to offer");
 		return (false, null);
 	}
