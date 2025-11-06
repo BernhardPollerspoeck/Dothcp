@@ -2,7 +2,6 @@ using qt.qsp.dhcp.Server.Components;
 using qt.qsp.dhcp.Server.Workers;
 using NLog.Web;
 using qt.qsp.dhcp.Server.Services;
-using qt.qsp.dhcp.Server.Grains.DhcpManager;
 using qt.qsp.dhcp.Server.Utilities;
 using Microsoft.EntityFrameworkCore;
 using qt.qsp.dhcp.Server.Data;
@@ -39,7 +38,7 @@ builder.Services.AddScoped<IClientRepository, ClientRepository>();
 
 // Register Core Services (replacements for Grains)
 builder.Services.AddScoped<ILeaseService, LeaseService>();
-builder.Services.AddScoped<IReservationService, ReservationServiceCore>();
+builder.Services.AddScoped<Core.IReservationService, ReservationServiceCore>();
 builder.Services.AddScoped<IIpAddressService, IpAddressService>();
 builder.Services.AddScoped<IConfigurationService, ConfigurationService>();
 

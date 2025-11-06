@@ -1,6 +1,6 @@
 ﻿using qt.qsp.dhcp.Server.Models;
 
-namespace qt.qsp.dhcp.Server.Grains.DhcpManager;
+namespace qt.qsp.dhcp.Server.Services;
 
 public interface IOfferGeneratorService
 {

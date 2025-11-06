@@ -1,4 +1,4 @@
-using qt.qsp.dhcp.Server.Grains.DhcpManager;
+using qt.qsp.dhcp.Server.Models;
 using System.Net.NetworkInformation;
 
 namespace qt.qsp.dhcp.Server.Services;

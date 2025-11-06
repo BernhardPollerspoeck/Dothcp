@@ -1,8 +1,9 @@
 @page "/reservations"
 @using qt.qsp.dhcp.Server.Services
-@using qt.qsp.dhcp.Server.Grains.DhcpManager
+@using qt.qsp.dhcp.Server.Services.Core
+@using qt.qsp.dhcp.Server.Models
 @using System.Net
-@inject IReservationService ReservationService
+@inject Core.IReservationService ReservationService
 @inject IJSRuntime JSRuntime
 
 <PageTitle>IP Reservations - DHCP Server</PageTitle>

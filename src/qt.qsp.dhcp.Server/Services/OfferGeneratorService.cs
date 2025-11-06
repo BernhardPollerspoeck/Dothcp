@@ -9,7 +9,7 @@ using qt.qsp.dhcp.Server.Data.Repositories;
 using System.Net;
 using System.Net.Sockets;
 
-namespace qt.qsp.dhcp.Server.Grains.DhcpManager;
+namespace qt.qsp.dhcp.Server.Services;
 
 public class OfferGeneratorService(
 	ILogger<OfferGeneratorService> logger,

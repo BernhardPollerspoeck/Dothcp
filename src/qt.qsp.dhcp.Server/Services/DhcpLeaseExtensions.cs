@@ -2,7 +2,7 @@ using System.Net;
 using System.Net.NetworkInformation;
 using System.Text;
 
-namespace qt.qsp.dhcp.Server.Grains.DhcpManager;
+namespace qt.qsp.dhcp.Server.Services;
 
 public static class DhcpLeaseExtensions
 {

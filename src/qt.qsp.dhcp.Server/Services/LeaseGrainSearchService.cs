@@ -3,7 +3,7 @@ using qt.qsp.dhcp.Server.Services;
 using qt.qsp.dhcp.Server.Services.Core;
 using qt.qsp.dhcp.Server.Utilities;
 
-namespace qt.qsp.dhcp.Server.Grains.DhcpManager;
+namespace qt.qsp.dhcp.Server.Services;
 
 public class LeaseGrainSearchService : ILeaseGrainSearchService
 {
@@ -34,7 +34,7 @@ public class LeaseGrainSearchService : ILeaseGrainSearchService
 
             if (lease != null && !lease.IsExpired())
             {
-                // Convert from Models.DhcpLease to Grains.DhcpManager.DhcpLease
+                // Convert from Models.DhcpLease
                 return ConvertToGrainModel(lease);
             }
         }

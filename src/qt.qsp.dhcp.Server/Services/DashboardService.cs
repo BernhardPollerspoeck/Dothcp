@@ -1,4 +1,4 @@
-using qt.qsp.dhcp.Server.Grains.DhcpManager;
+using qt.qsp.dhcp.Server.Models;
 using qt.qsp.dhcp.Server.Services.Core;
 using System.Net.NetworkInformation;
 using System.Diagnostics;
@@ -281,7 +281,7 @@ public class DashboardService : IDashboardService
                 .Where(l => l.Status == Models.LeaseStatus.Active)
                 .OrderByDescending(l => l.LeaseStart)
                 .Take(10)
-                .Select(ConvertToGrainModel)
+                
                 .ToList();
         }
         catch (Exception ex)
@@ -318,7 +318,7 @@ public class DashboardService : IDashboardService
 
             // Get all leases from service
             var leases = await _leaseService.GetAllLeasesAsync();
-            allLeases.AddRange(leases.Select(ConvertToGrainModel));
+            allLeases.AddRange(leases);
 
             // Add test leases for development environment (in addition to real leases)
             if (_environment.IsDevelopment() && allLeases.Count < 5)
@@ -399,31 +399,3 @@ public class DashboardService : IDashboardService
         return testLeases;
     }
 
-    private DhcpLease ConvertToGrainModel(Models.DhcpLease modelLease)
-    {
-        var grainLease = new DhcpLease
-        {
-            MacAddress = modelLease.MacAddress,
-            IpAddressString = modelLease.IpAddressString,
-            HostName = modelLease.HostName,
-            LeaseDuration = modelLease.LeaseDuration,
-            LeaseStart = modelLease.LeaseStart,
-            Status = (LeaseStatus)modelLease.Status,
-            SubnetString = modelLease.SubnetString,
-            RouterString = modelLease.RouterString,
-            DhcpServerString = modelLease.DhcpServerString
-        };
-
-        // Convert DNS servers
-        if (!string.IsNullOrEmpty(modelLease.DnsServerStringsJson))
-        {
-            var dnsServers = System.Text.Json.JsonSerializer.Deserialize<List<string>>(modelLease.DnsServerStringsJson);
-            if (dnsServers != null)
-            {
-                grainLease.DnsServerStrings = dnsServers;
-            }
-        }
-
-        return grainLease;
-    }
-}

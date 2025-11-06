@@ -1,7 +1,7 @@
 @page "/leases"
 @using qt.qsp.dhcp.Server.Services
 @using qt.qsp.dhcp.Server.Services.Core
-@using qt.qsp.dhcp.Server.Grains.DhcpManager
+@using qt.qsp.dhcp.Server.Models
 @using qt.qsp.dhcp.Server.Components.Dashboard
 @inject IDashboardService DashboardService
 @inject ILeaseService LeaseService
@@ -565,7 +565,7 @@
 
         try
         {
-            // Convert from Grains.DhcpManager.DhcpLease to Models.DhcpLease
+            // Convert to Models.DhcpLease format
             var renewedLease = new Models.DhcpLease
             {
                 MacAddress = lease.MacAddress,
@@ -631,7 +631,7 @@
                 {
                     try
                     {
-                        // Convert from Grains.DhcpManager.DhcpLease to Models.DhcpLease
+                        // Convert to Models.DhcpLease format
                         var renewedLease = new Models.DhcpLease
                         {
                             MacAddress = lease.MacAddress,
