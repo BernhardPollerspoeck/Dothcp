@@ -1,12 +1,12 @@
 ﻿@page "/settings"
-@using qt.qsp.dhcp.Server.Grains.Settings
 @using qt.qsp.dhcp.Server.Constants
 @using qt.qsp.dhcp.Server.Services
+@using qt.qsp.dhcp.Server.Services.Core
 @using qt.qsp.dhcp.Server.Models
 @using qt.qsp.dhcp.Server.Utilities
 @using System.ComponentModel.DataAnnotations
 
-@inject IClusterClient ClusterClient
+@inject IConfigurationService ConfigurationService
 @inject ISettingsService SettingsService
 @inject INetworkUtilityService NetworkUtilityService
 
@@ -503,20 +503,15 @@ else if (editableSettings != null)
 
 	private async Task<TResult> GetSettingsValue<TResult>(string key)
 	{
-		return await ClusterClient
-			.GetGrain<ISettingsGrain>(key)
-			.GetValue<TResult>();
+		var value = await ConfigurationService.GetSettingAsync<TResult>(key);
+		return value ?? default!;
 	}
 
 	private async Task<TResult?> GetSettingsValueSafe<TResult>(string key) where TResult : class
 	{
 		try
 		{
-			var grain = ClusterClient.GetGrain<ISettingsGrain>(key);
-			if (await grain.HasValue())
-			{
-				return await grain.GetValue<TResult>();
-			}
+			return await ConfigurationService.GetSettingAsync<TResult>(key);
 		}
 		catch
 		{

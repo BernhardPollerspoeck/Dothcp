@@ -1,12 +1,12 @@
 @page "/setup"
-@using qt.qsp.dhcp.Server.Grains.Settings
 @using qt.qsp.dhcp.Server.Constants
 @using qt.qsp.dhcp.Server.Services
+@using qt.qsp.dhcp.Server.Services.Core
 @using qt.qsp.dhcp.Server.Models
 @using qt.qsp.dhcp.Server.Utilities
 @using System.ComponentModel.DataAnnotations
 
-@inject IClusterClient ClusterClient
+@inject IConfigurationService ConfigurationService
 @inject ISettingsService SettingsService
 @inject INetworkUtilityService NetworkUtilityService
 @inject IDhcpServerService DhcpServerService
@@ -217,10 +217,10 @@ else if (setupSettings != null)
 		try
 		{
 			// Check if basic required settings exist
-			var subnetGrain = ClusterClient.GetGrain<ISettingsGrain>(SettingsConstants.DHCP_LEASE_SUBNET);
-			var routerGrain = ClusterClient.GetGrain<ISettingsGrain>(SettingsConstants.DHCP_LEASE_ROUTER);
-			
-			return await subnetGrain.HasValue() && await routerGrain.HasValue();
+			var subnet = await ConfigurationService.GetSettingAsync<string>(SettingsConstants.DHCP_LEASE_SUBNET);
+			var router = await ConfigurationService.GetSettingAsync<string>(SettingsConstants.DHCP_LEASE_ROUTER);
+
+			return !string.IsNullOrEmpty(subnet) && !string.IsNullOrEmpty(router);
 		}
 		catch
 		{
