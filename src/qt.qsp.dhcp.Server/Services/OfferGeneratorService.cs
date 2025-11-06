@@ -20,6 +20,10 @@ public class OfferGeneratorService(
 	IClientRepository clientRepository)
 	: IOfferGeneratorService
 {
+	// Semaphore to prevent race conditions during IP allocation
+	// Only one thread can allocate/check IP status at a time
+	private static readonly SemaphoreSlim _ipAllocationLock = new SemaphoreSlim(1, 1);
+
 	#region IOfferGeneratorService
 	
 	/// <summary>
@@ -37,39 +41,48 @@ public class OfferGeneratorService(
 		{
 			var reservedIp = reservation.IpAddress.ToString();
 
-			// Check if the reserved IP is available or already assigned to this client
-			var addressStatus = await ipAddressService.GetStatusAsync(reservedIp);
-
-			// If IP is available or already assigned to this client, use the reservation
-			if (addressStatus == Models.EIpAddressStatus.Available ||
-				((addressStatus == Models.EIpAddressStatus.Offered || addressStatus == Models.EIpAddressStatus.Claimed) &&
-				 (await ipAddressService.GetIpAddressInfoAsync(reservedIp))?.ClientId == clientId))
+			// Thread-safe IP allocation - lock to prevent race conditions
+			await _ipAllocationLock.WaitAsync();
+			try
 			{
-				await ipAddressService.SetStatusAsync(reservedIp, Models.EIpAddressStatus.Offered, clientId);
+				// Check if the reserved IP is available or already assigned to this client
+				var addressStatus = await ipAddressService.GetStatusAsync(reservedIp);
 
-				clientInfo.AssignedIpAddress = reservedIp;
-				clientInfo.State = EClientState.Offered.ToString();
-				await clientRepository.AddOrUpdateAsync(clientInfo);
-
-				// Mark the reservation as used
-				var reservationCore = await ((Core.IReservationService)reservationService).GetReservationByIpAsync(IPAddress.Parse(reservedIp));
-				if (reservationCore != null)
+				// If IP is available or already assigned to this client, use the reservation
+				if (addressStatus == Models.EIpAddressStatus.Available ||
+					((addressStatus == Models.EIpAddressStatus.Offered || addressStatus == Models.EIpAddressStatus.Claimed) &&
+					 (await ipAddressService.GetIpAddressInfoAsync(reservedIp))?.ClientId == clientId))
 				{
-					reservationCore.MarkAsUsed();
-					await ((Core.IReservationService)reservationService).UpdateReservationAsync(reservationCore);
-				}
+					await ipAddressService.SetStatusAsync(reservedIp, Models.EIpAddressStatus.Offered, clientId);
 
-				logger.LogInformation("Create offer for {clientAddress} based on IP reservation for MAC {macAddress}",
-					reservedIp, macAddress);
-				var offer = await CreateOffer(message, reservedIp);
-				return (offer is not null, offer);
+					clientInfo.AssignedIpAddress = reservedIp;
+					clientInfo.State = EClientState.Offered.ToString();
+					await clientRepository.AddOrUpdateAsync(clientInfo);
+
+					// Mark the reservation as used
+					var reservationCore = await ((Core.IReservationService)reservationService).GetReservationByIpAsync(IPAddress.Parse(reservedIp));
+					if (reservationCore != null)
+					{
+						reservationCore.MarkAsUsed();
+						await ((Core.IReservationService)reservationService).UpdateReservationAsync(reservationCore);
+					}
+
+					logger.LogInformation("Create offer for {clientAddress} based on IP reservation for MAC {macAddress}",
+						reservedIp, macAddress);
+					var offer = await CreateOffer(message, reservedIp);
+					return (offer is not null, offer);
+				}
+				else
+				{
+					// The reserved IP is claimed by another client - this is a conflict that should be logged
+					var otherClientId = (await ipAddressService.GetIpAddressInfoAsync(reservedIp))?.ClientId;
+					logger.LogWarning("Reserved IP {reservedIp} for MAC {macAddress} is claimed by another client {otherClientId}",
+						reservedIp, macAddress, otherClientId);
+				}
 			}
-			else
+			finally
 			{
-				// The reserved IP is claimed by another client - this is a conflict that should be logged
-				var otherClientId = (await ipAddressService.GetIpAddressInfoAsync(reservedIp))?.ClientId;
-				logger.LogWarning("Reserved IP {reservedIp} for MAC {macAddress} is claimed by another client {otherClientId}",
-					reservedIp, macAddress, otherClientId);
+				_ipAllocationLock.Release();
 			}
 		}
 
@@ -81,21 +94,31 @@ public class OfferGeneratorService(
 		if (!string.IsNullOrEmpty(clientInfo.AssignedIpAddress))
 		{
 			var previousIpAddress = clientInfo.AssignedIpAddress;
-			var status = await ipAddressService.GetStatusAsync(previousIpAddress);
-			var ipInfo = await ipAddressService.GetIpAddressInfoAsync(previousIpAddress);
 
-			if ((status == Models.EIpAddressStatus.Claimed || status == Models.EIpAddressStatus.Offered)
-				&& ipInfo?.ClientId == clientId)
+			// Thread-safe IP allocation - lock to prevent race conditions
+			await _ipAllocationLock.WaitAsync();
+			try
 			{
-				clientInfo.AssignedIpAddress = previousIpAddress;
-				clientInfo.State = EClientState.Offered.ToString();
-				await clientRepository.AddOrUpdateAsync(clientInfo);
+				var status = await ipAddressService.GetStatusAsync(previousIpAddress);
+				var ipInfo = await ipAddressService.GetIpAddressInfoAsync(previousIpAddress);
 
-				await ipAddressService.SetStatusAsync(previousIpAddress, Models.EIpAddressStatus.Offered, clientId);
+				if ((status == Models.EIpAddressStatus.Claimed || status == Models.EIpAddressStatus.Offered)
+					&& ipInfo?.ClientId == clientId)
+				{
+					clientInfo.AssignedIpAddress = previousIpAddress;
+					clientInfo.State = EClientState.Offered.ToString();
+					await clientRepository.AddOrUpdateAsync(clientInfo);
 
-				logger.LogInformation("Create offer for {clientAddress} based on previously assigned address", previousIpAddress);
-				var offer = await CreateOffer(message, previousIpAddress);
-				return (offer is not null, offer);
+					await ipAddressService.SetStatusAsync(previousIpAddress, Models.EIpAddressStatus.Offered, clientId);
+
+					logger.LogInformation("Create offer for {clientAddress} based on previously assigned address", previousIpAddress);
+					var offer = await CreateOffer(message, previousIpAddress);
+					return (offer is not null, offer);
+				}
+			}
+			finally
+			{
+				_ipAllocationLock.Release();
 			}
 		}
 		return (false, null);
@@ -133,26 +156,35 @@ public class OfferGeneratorService(
 				return (false, null);
 			}
 
-			// Check if the IP is available in our system
-			var addressStatus = await ipAddressService.GetStatusAsync(requestedIp);
-			var ipInfo = await ipAddressService.GetIpAddressInfoAsync(requestedIp);
-
-			if (addressStatus == Models.EIpAddressStatus.Available ||
-				((addressStatus == Models.EIpAddressStatus.Offered || addressStatus == Models.EIpAddressStatus.Claimed) &&
-				 ipInfo?.ClientId == clientId))
+			// Thread-safe IP allocation - lock to prevent race conditions
+			await _ipAllocationLock.WaitAsync();
+			try
 			{
-				await ipAddressService.SetStatusAsync(requestedIp, Models.EIpAddressStatus.Offered, clientId);
+				// Check if the IP is available in our system
+				var addressStatus = await ipAddressService.GetStatusAsync(requestedIp);
+				var ipInfo = await ipAddressService.GetIpAddressInfoAsync(requestedIp);
 
-				clientInfo.AssignedIpAddress = requestedIp;
-				clientInfo.State = EClientState.Offered.ToString();
-				await clientRepository.AddOrUpdateAsync(clientInfo);
+				if (addressStatus == Models.EIpAddressStatus.Available ||
+					((addressStatus == Models.EIpAddressStatus.Offered || addressStatus == Models.EIpAddressStatus.Claimed) &&
+					 ipInfo?.ClientId == clientId))
+				{
+					await ipAddressService.SetStatusAsync(requestedIp, Models.EIpAddressStatus.Offered, clientId);
 
-				logger.LogInformation("Create offer for {clientAddress} based on client requested address", requestedIp);
-				var offer = await CreateOffer(message, requestedIp);
-				return (offer is not null, offer);
+					clientInfo.AssignedIpAddress = requestedIp;
+					clientInfo.State = EClientState.Offered.ToString();
+					await clientRepository.AddOrUpdateAsync(clientInfo);
+
+					logger.LogInformation("Create offer for {clientAddress} based on client requested address", requestedIp);
+					var offer = await CreateOffer(message, requestedIp);
+					return (offer is not null, offer);
+				}
+
+				logger.LogWarning("Requested IP {requestedIp} is not available in the system", requestedIp);
 			}
-
-			logger.LogWarning("Requested IP {requestedIp} is not available in the system", requestedIp);
+			finally
+			{
+				_ipAllocationLock.Release();
+			}
 		}
 
 		return (false, null);
@@ -202,24 +234,33 @@ public class OfferGeneratorService(
 				}
 			}
 
-			var addressStatus = await ipAddressService.GetStatusAsync(ipAddress);
-
-			if (addressStatus != Models.EIpAddressStatus.Available)
+			// Thread-safe IP allocation - lock to prevent race conditions
+			await _ipAllocationLock.WaitAsync();
+			try
 			{
-				continue;
+				var addressStatus = await ipAddressService.GetStatusAsync(ipAddress);
+
+				if (addressStatus != Models.EIpAddressStatus.Available)
+				{
+					continue;
+				}
+
+				// Mark the address as offered
+				await ipAddressService.SetStatusAsync(ipAddress, Models.EIpAddressStatus.Offered, clientId);
+
+				// Update client information
+				clientInfo.AssignedIpAddress = ipAddress;
+				clientInfo.State = EClientState.Offered.ToString();
+				await clientRepository.AddOrUpdateAsync(clientInfo);
+
+				logger.LogInformation("Create offer for {clientAddress} based on random address", ipAddress);
+				var offer = await CreateOffer(message, ipAddress);
+				return (offer is not null, offer);
 			}
-
-			// Mark the address as offered
-			await ipAddressService.SetStatusAsync(ipAddress, Models.EIpAddressStatus.Offered, clientId);
-
-			// Update client information
-			clientInfo.AssignedIpAddress = ipAddress;
-			clientInfo.State = EClientState.Offered.ToString();
-			await clientRepository.AddOrUpdateAsync(clientInfo);
-
-			logger.LogInformation("Create offer for {clientAddress} based on random address", ipAddress);
-			var offer = await CreateOffer(message, ipAddress);
-			return (offer is not null, offer);
+			finally
+			{
+				_ipAllocationLock.Release();
+			}
 		}
 
 		logger.LogWarning("No available IP addresses to offer");
