@@ -199,22 +199,40 @@ public class DhcpMessageHandler : IDhcpMessageHandler
         // Get the lease duration from settings
         var leaseDuration = await _settingsLoader.GetSetting<TimeSpan>(SettingsConstants.DHCP_LEASE_TIME);
 
-        // Create or update lease
+        // Check if this is a renewal of an existing lease
         var macAddress = BitConverter.ToString(message.ClientHardwareAdress).Replace("-", ":");
-        var lease = new Models.DhcpLease
+        var existingLease = await _leaseService.GetLeaseAsync(requestedIp);
+
+        if (existingLease != null && existingLease.MacAddress == macAddress)
         {
-            MacAddress = macAddress,
-            IpAddressString = requestedIp,
-            HostName = message.GetHostname(),
-            LeaseDuration = leaseDuration,
-            LeaseStart = DateTime.UtcNow,
-            Status = Models.LeaseStatus.Active
-        };
+            // RENEWAL: Keep the original LeaseStart, update status to Renewed
+            existingLease.Status = Models.LeaseStatus.Renewed;
+            existingLease.LeaseDuration = leaseDuration;
+            existingLease.HostName = message.GetHostname() ?? existingLease.HostName;
+            // LeaseStart is NOT changed - this preserves the original lease start time
+            await _leaseService.UpdateLeaseAsync(existingLease);
 
-        await _leaseService.UpdateLeaseAsync(lease);
+            _logger.LogInformation("Renewed lease for IP {requestedIp} to client {clientId}, original lease start: {leaseStart}",
+                requestedIp, clientId, existingLease.LeaseStart);
+        }
+        else
+        {
+            // NEW LEASE: Create new lease with current time as LeaseStart
+            var newLease = new Models.DhcpLease
+            {
+                MacAddress = macAddress,
+                IpAddressString = requestedIp,
+                HostName = message.GetHostname(),
+                LeaseDuration = leaseDuration,
+                LeaseStart = DateTime.UtcNow,
+                Status = Models.LeaseStatus.Active
+            };
 
-        _logger.LogInformation("IP Address {requestedIp} assigned to client {clientId} with lease duration {leaseDuration}",
-            requestedIp, clientId, leaseDuration);
+            await _leaseService.UpdateLeaseAsync(newLease);
+
+            _logger.LogInformation("Created new lease for IP {requestedIp} to client {clientId}",
+                requestedIp, clientId);
+        }
 
         // Create ACK response
         return await CreateAckMessage(message, requestedIp);
