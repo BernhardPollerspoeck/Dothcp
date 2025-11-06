@@ -1,15 +1,16 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
 using qt.qsp.dhcp.Server.Models;
 using qt.qsp.dhcp.Server.Models.Enumerations;
 using qt.qsp.dhcp.Server.Models.OptionBuilder;
 using System.Net;
 using System.Text;
-using Xunit;
 
 namespace qt.qsp.dhcp.Server.Tests;
 
+[TestClass]
 public class DhcpOptionsTests
 {
-    [Fact]
+    [TestMethod]
     public void BuildAndParseDomainName_ShouldMatch()
     {
         // Arrange
@@ -36,13 +37,13 @@ public class DhcpOptionsTests
         };
         
         var retrievedDomainName = message.GetDomainName();
-        
+
         // Assert
-        Assert.NotNull(retrievedDomainName);
-        Assert.Equal(domainName, retrievedDomainName);
+        Assert.IsNotNull(retrievedDomainName);
+        Assert.AreEqual(domainName, retrievedDomainName);
     }
-    
-    [Fact]
+
+    [TestMethod]
     public void BuildAndParseNetBiosNameServers_ShouldMatch()
     {
         // Arrange
@@ -71,13 +72,13 @@ public class DhcpOptionsTests
         var retrievedServers = message.GetNetBiosNameServers();
         
         // Assert
-        Assert.NotNull(retrievedServers);
-        Assert.Equal(nameServers.Length, retrievedServers.Length);
-        Assert.Equal(IPAddress.Parse(nameServers[0]), retrievedServers[0]);
-        Assert.Equal(IPAddress.Parse(nameServers[1]), retrievedServers[1]);
+        Assert.IsNotNull(retrievedServers);
+        Assert.AreEqual(nameServers.Length, retrievedServers.Length);
+        Assert.AreEqual(IPAddress.Parse(nameServers[0]), retrievedServers[0]);
+        Assert.AreEqual(IPAddress.Parse(nameServers[1]), retrievedServers[1]);
     }
     
-    [Fact]
+    [TestMethod]
     public void BuildAndParseNetBiosNodeType_ShouldMatch()
     {
         // Arrange
@@ -106,11 +107,11 @@ public class DhcpOptionsTests
         var retrievedNodeType = message.GetNetBiosNodeType();
         
         // Assert
-        Assert.NotNull(retrievedNodeType);
-        Assert.Equal(nodeType, retrievedNodeType);
+        Assert.IsNotNull(retrievedNodeType);
+        Assert.AreEqual(nodeType, retrievedNodeType);
     }
     
-    [Fact]
+    [TestMethod]
     public void BuildAndParseNetBiosScope_ShouldMatch()
     {
         // Arrange
@@ -139,11 +140,11 @@ public class DhcpOptionsTests
         var retrievedScope = message.GetNetBiosScope();
         
         // Assert
-        Assert.NotNull(retrievedScope);
-        Assert.Equal(scope, retrievedScope);
+        Assert.IsNotNull(retrievedScope);
+        Assert.AreEqual(scope, retrievedScope);
     }
     
-    [Fact]
+    [TestMethod]
     public void BuildAndParseVendorSpecificInfo_ShouldMatch()
     {
         // Arrange
@@ -172,15 +173,15 @@ public class DhcpOptionsTests
         var retrievedInfo = message.GetVendorSpecificInfo();
         
         // Assert
-        Assert.NotNull(retrievedInfo);
-        Assert.Equal(vendorInfo.Length, retrievedInfo.Length);
+        Assert.IsNotNull(retrievedInfo);
+        Assert.AreEqual(vendorInfo.Length, retrievedInfo.Length);
         for (int i = 0; i < vendorInfo.Length; i++)
         {
-            Assert.Equal(vendorInfo[i], retrievedInfo[i]);
+            Assert.AreEqual(vendorInfo[i], retrievedInfo[i]);
         }
     }
     
-    [Fact]
+    [TestMethod]
     public void BuildAndParseNtpServers_ShouldMatch()
     {
         // Arrange
@@ -209,13 +210,13 @@ public class DhcpOptionsTests
         var retrievedServers = message.GetNtpServers();
         
         // Assert
-        Assert.NotNull(retrievedServers);
-        Assert.Equal(ntpServers.Length, retrievedServers.Length);
-        Assert.Equal(IPAddress.Parse(ntpServers[0]), retrievedServers[0]);
-        Assert.Equal(IPAddress.Parse(ntpServers[1]), retrievedServers[1]);
+        Assert.IsNotNull(retrievedServers);
+        Assert.AreEqual(ntpServers.Length, retrievedServers.Length);
+        Assert.AreEqual(IPAddress.Parse(ntpServers[0]), retrievedServers[0]);
+        Assert.AreEqual(IPAddress.Parse(ntpServers[1]), retrievedServers[1]);
     }
     
-    [Fact]
+    [TestMethod]
     public void BuildAndParseRelayAgentInfo_ShouldMatch()
     {
         // Arrange
@@ -244,15 +245,15 @@ public class DhcpOptionsTests
         var retrievedInfo = message.GetRelayAgentInfo();
         
         // Assert
-        Assert.NotNull(retrievedInfo);
-        Assert.Equal(relayInfo.Length, retrievedInfo.Length);
+        Assert.IsNotNull(retrievedInfo);
+        Assert.AreEqual(relayInfo.Length, retrievedInfo.Length);
         for (int i = 0; i < relayInfo.Length; i++)
         {
-            Assert.Equal(relayInfo[i], retrievedInfo[i]);
+            Assert.AreEqual(relayInfo[i], retrievedInfo[i]);
         }
     }
     
-    [Fact]
+    [TestMethod]
     public void BuildAndParseClasslessStaticRoutes_ShouldMatch()
     {
         // Arrange
@@ -285,8 +286,8 @@ public class DhcpOptionsTests
         var retrievedRoutes = message.GetClasslessStaticRoutes();
         
         // Assert
-        Assert.NotNull(retrievedRoutes);
-        Assert.Equal(routes.Count, retrievedRoutes.Count);
+        Assert.IsNotNull(retrievedRoutes);
+        Assert.AreEqual(routes.Count, retrievedRoutes.Count);
         
         // Verify routes match
         foreach (var route in routes)
@@ -316,11 +317,11 @@ public class DhcpOptionsTests
                 }
             }
             
-            Assert.True(foundMatch, "Could not find matching static route in retrieved routes");
+            Assert.IsTrue(foundMatch, "Could not find matching static route in retrieved routes");
         }
     }
     
-    [Fact]
+    [TestMethod]
     public void BuildAndParseDnsSearchList_ShouldMatchSimpleDomains()
     {
         // Arrange
@@ -349,13 +350,13 @@ public class DhcpOptionsTests
         var retrievedDomains = message.GetDnsSearchList();
         
         // Assert
-        Assert.NotNull(retrievedDomains);
-        Assert.Equal(searchDomains.Length, retrievedDomains.Length);
-        Assert.Contains("example.com", retrievedDomains);
-        Assert.Contains("test.local", retrievedDomains);
+        Assert.IsNotNull(retrievedDomains);
+        Assert.AreEqual(searchDomains.Length, retrievedDomains.Length);
+        CollectionAssert.Contains(retrievedDomains, "example.com");
+        CollectionAssert.Contains(retrievedDomains, "test.local");
     }
     
-    [Fact]
+    [TestMethod]
     public void BuildAndParseDnsSearchList_WithCompressionPointers_ShouldMatch()
     {
         // Arrange
@@ -384,8 +385,8 @@ public class DhcpOptionsTests
         var retrievedDomains = message.GetDnsSearchList();
         
         // Assert
-        Assert.NotNull(retrievedDomains);
-        Assert.Equal(searchDomains.Length, retrievedDomains.Length);
+        Assert.IsNotNull(retrievedDomains);
+        Assert.AreEqual(searchDomains.Length, retrievedDomains.Length);
         
         // Sort both arrays for comparison since order may not be preserved due to compression
         Array.Sort(searchDomains);
@@ -393,11 +394,11 @@ public class DhcpOptionsTests
         
         for (int i = 0; i < searchDomains.Length; i++)
         {
-            Assert.Equal(searchDomains[i], sortedRetrieved[i]);
+            Assert.AreEqual(searchDomains[i], sortedRetrieved[i]);
         }
     }
     
-    [Fact]
+    [TestMethod]
     public void AddNtpServerOptions_WithNullArray_ShouldNotThrow()
     {
         // Arrange
@@ -406,15 +407,15 @@ public class DhcpOptionsTests
         // Act & Assert - Should not throw exception
         var result = builder.AddNtpServerOptions(null);
         
-        Assert.NotNull(result);
+        Assert.IsNotNull(result);
         var options = result.Build();
         
         // Should only contain the End option
-        Assert.Single(options);
-        Assert.Equal(EOption.End, options[0].Option);
+        Assert.AreEqual(1, options.Count);
+        Assert.AreEqual(EOption.End, options[0].Option);
     }
     
-    [Fact]
+    [TestMethod]
     public void AddDnsServerOptions_WithNullArray_ShouldNotThrow()
     {
         // Arrange
@@ -423,15 +424,15 @@ public class DhcpOptionsTests
         // Act & Assert - Should not throw exception
         var result = builder.AddDnsServerOptions(null);
         
-        Assert.NotNull(result);
+        Assert.IsNotNull(result);
         var options = result.Build();
         
         // Should only contain the End option
-        Assert.Single(options);
-        Assert.Equal(EOption.End, options[0].Option);
+        Assert.AreEqual(1, options.Count);
+        Assert.AreEqual(EOption.End, options[0].Option);
     }
     
-    [Fact]
+    [TestMethod]
     public void AddNetBiosNameServers_WithNullArray_ShouldNotThrow()
     {
         // Arrange
@@ -440,15 +441,15 @@ public class DhcpOptionsTests
         // Act & Assert - Should not throw exception
         var result = builder.AddNetBiosNameServers(null);
         
-        Assert.NotNull(result);
+        Assert.IsNotNull(result);
         var options = result.Build();
         
         // Should only contain the End option
-        Assert.Single(options);
-        Assert.Equal(EOption.End, options[0].Option);
+        Assert.AreEqual(1, options.Count);
+        Assert.AreEqual(EOption.End, options[0].Option);
     }
     
-    [Fact]
+    [TestMethod]
     public void AddDnsSearchList_WithNullArray_ShouldNotThrow()
     {
         // Arrange
@@ -457,15 +458,15 @@ public class DhcpOptionsTests
         // Act & Assert - Should not throw exception
         var result = builder.AddDnsSearchList(null);
         
-        Assert.NotNull(result);
+        Assert.IsNotNull(result);
         var options = result.Build();
         
         // Should only contain the End option
-        Assert.Single(options);
-        Assert.Equal(EOption.End, options[0].Option);
+        Assert.AreEqual(1, options.Count);
+        Assert.AreEqual(EOption.End, options[0].Option);
     }
     
-    [Fact]
+    [TestMethod]
     public void AddClasslessStaticRoutes_WithNullDictionary_ShouldNotThrow()
     {
         // Arrange
@@ -474,22 +475,22 @@ public class DhcpOptionsTests
         // Act & Assert - Should not throw exception
         var result = builder.AddClasslessStaticRoutes(null);
         
-        Assert.NotNull(result);
+        Assert.IsNotNull(result);
         var options = result.Build();
         
         // Should only contain the End option
-        Assert.Single(options);
-        Assert.Equal(EOption.End, options[0].Option);
+        Assert.AreEqual(1, options.Count);
+        Assert.AreEqual(EOption.End, options[0].Option);
     }
     
-    [Fact]
+    [TestMethod]
     public void AddRouterOption_WithNullArray_ShouldThrowInvalidDataException()
     {
         // Arrange
         var builder = new DhcpOptionsBuilder();
         
         // Act & Assert - Router is required, so null should throw
-        var exception = Assert.Throws<InvalidDataException>(() => builder.AddRouterOption(null));
-        Assert.Equal("At least 1 router is required", exception.Message);
+        var exception = Assert.ThrowsException<InvalidDataException>(() => builder.AddRouterOption(null));
+        Assert.AreEqual("At least 1 router is required", exception.Message);
     }
 }

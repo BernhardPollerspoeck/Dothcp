@@ -1,10 +1,10 @@
 @page "/leases"
 @using qt.qsp.dhcp.Server.Services
-@using qt.qsp.dhcp.Server.Grains.DhcpManager
+@using qt.qsp.dhcp.Server.Services.Core
+@using qt.qsp.dhcp.Server.Models
 @using qt.qsp.dhcp.Server.Components.Dashboard
-@using Orleans
 @inject IDashboardService DashboardService
-@inject IGrainFactory GrainFactory
+@inject ILeaseService LeaseService
 @inject IJSRuntime JSRuntime
 
 <PageTitle>Active Leases - DHCP Server</PageTitle>
@@ -562,37 +562,33 @@
     {
         // Close modal first
         CloseLeaseModal();
-        
+
         try
         {
-            var leaseGrain = GrainFactory.GetGrain<IDhcpLeaseGrain>(lease.IpAddress.ToString());
-            
-            // Create a renewed lease with extended expiration
-            var renewedLease = new DhcpLease
+            // Convert to Models.DhcpLease format
+            var renewedLease = new Models.DhcpLease
             {
-                IpAddress = lease.IpAddress,
                 MacAddress = lease.MacAddress,
+                IpAddressString = lease.IpAddress.ToString(),
                 HostName = lease.HostName,
                 LeaseStart = DateTime.UtcNow,
                 LeaseDuration = lease.LeaseDuration,
-                Status = LeaseStatus.Renewed,
-                Subnet = lease.Subnet,
-                Router = lease.Router,
-                DhcpServer = lease.DhcpServer,
-                DnsServers = lease.DnsServers
+                Status = Models.LeaseStatus.Renewed,
+                SubnetString = lease.Subnet?.ToString(),
+                RouterString = lease.Router?.ToString(),
+                DhcpServerString = lease.DhcpServer?.ToString()
             };
-            
-            var success = await leaseGrain.UpdateLease(renewedLease);
-            
-            if (success)
+
+            // Convert DNS servers
+            if (lease.DnsServers != null && lease.DnsServers.Count > 0)
             {
-                await JSRuntime.InvokeVoidAsync("alert", $"Lease for {lease.IpAddress} has been successfully renewed.");
-                await RefreshLeases(); // Refresh the data
+                renewedLease.DnsServerStringsJson = System.Text.Json.JsonSerializer.Serialize(
+                    lease.DnsServers.Select(ip => ip.ToString()).ToList());
             }
-            else
-            {
-                await JSRuntime.InvokeVoidAsync("alert", $"Failed to renew lease for {lease.IpAddress}.");
-            }
+
+            await LeaseService.UpdateLeaseAsync(renewedLease);
+            await JSRuntime.InvokeVoidAsync("alert", $"Lease for {lease.IpAddress} has been successfully renewed.");
+            await RefreshLeases(); // Refresh the data
         }
         catch (Exception ex)
         {
@@ -604,24 +600,15 @@
     {
         // Close modal first
         CloseLeaseModal();
-        
+
         var confirmed = await JSRuntime.InvokeAsync<bool>("confirm", $"Are you sure you want to revoke the lease for {lease.IpAddress}?");
         if (confirmed)
         {
             try
             {
-                var leaseGrain = GrainFactory.GetGrain<IDhcpLeaseGrain>(lease.IpAddress.ToString());
-                var success = await leaseGrain.RevokeLease();
-                
-                if (success)
-                {
-                    await JSRuntime.InvokeVoidAsync("alert", $"Lease for {lease.IpAddress} has been successfully revoked.");
-                    await RefreshLeases(); // Refresh the data
-                }
-                else
-                {
-                    await JSRuntime.InvokeVoidAsync("alert", $"Failed to revoke lease for {lease.IpAddress}.");
-                }
+                await LeaseService.RevokeLeaseAsync(lease.IpAddress.ToString());
+                await JSRuntime.InvokeVoidAsync("alert", $"Lease for {lease.IpAddress} has been successfully revoked.");
+                await RefreshLeases(); // Refresh the data
             }
             catch (Exception ex)
             {
@@ -639,38 +626,41 @@
             {
                 var successCount = 0;
                 var failCount = 0;
-                
+
                 foreach (var lease in selectedLeases.ToList())
                 {
                     try
                     {
-                        var leaseGrain = GrainFactory.GetGrain<IDhcpLeaseGrain>(lease.IpAddress.ToString());
-                        
-                        // Create a renewed lease with extended expiration
-                        var renewedLease = new DhcpLease
+                        // Convert to Models.DhcpLease format
+                        var renewedLease = new Models.DhcpLease
                         {
-                            IpAddress = lease.IpAddress,
                             MacAddress = lease.MacAddress,
+                            IpAddressString = lease.IpAddress.ToString(),
                             HostName = lease.HostName,
                             LeaseStart = DateTime.UtcNow,
                             LeaseDuration = lease.LeaseDuration,
-                            Status = LeaseStatus.Renewed,
-                            Subnet = lease.Subnet,
-                            Router = lease.Router,
-                            DhcpServer = lease.DhcpServer,
-                            DnsServers = lease.DnsServers
+                            Status = Models.LeaseStatus.Renewed,
+                            SubnetString = lease.Subnet?.ToString(),
+                            RouterString = lease.Router?.ToString(),
+                            DhcpServerString = lease.DhcpServer?.ToString()
                         };
-                        
-                        var success = await leaseGrain.UpdateLease(renewedLease);
-                        if (success) successCount++;
-                        else failCount++;
+
+                        // Convert DNS servers
+                        if (lease.DnsServers != null && lease.DnsServers.Count > 0)
+                        {
+                            renewedLease.DnsServerStringsJson = System.Text.Json.JsonSerializer.Serialize(
+                                lease.DnsServers.Select(ip => ip.ToString()).ToList());
+                        }
+
+                        await LeaseService.UpdateLeaseAsync(renewedLease);
+                        successCount++;
                     }
                     catch
                     {
                         failCount++;
                     }
                 }
-                
+
                 await JSRuntime.InvokeVoidAsync("alert", $"Bulk renewal completed: {successCount} successful, {failCount} failed.");
                 selectedLeases.Clear();
                 await RefreshLeases();
@@ -691,22 +681,20 @@
             {
                 var successCount = 0;
                 var failCount = 0;
-                
+
                 foreach (var lease in selectedLeases.ToList())
                 {
                     try
                     {
-                        var leaseGrain = GrainFactory.GetGrain<IDhcpLeaseGrain>(lease.IpAddress.ToString());
-                        var success = await leaseGrain.RevokeLease();
-                        if (success) successCount++;
-                        else failCount++;
+                        await LeaseService.RevokeLeaseAsync(lease.IpAddress.ToString());
+                        successCount++;
                     }
                     catch
                     {
                         failCount++;
                     }
                 }
-                
+
                 await JSRuntime.InvokeVoidAsync("alert", $"Bulk revocation completed: {successCount} successful, {failCount} failed.");
                 selectedLeases.Clear();
                 await RefreshLeases();

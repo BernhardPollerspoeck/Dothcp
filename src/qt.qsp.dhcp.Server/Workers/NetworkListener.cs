@@ -2,15 +2,25 @@
 using System.Net;
 using qt.qsp.dhcp.Server.Models;
 using qt.qsp.dhcp.Server.Models.Enumerations;
-using qt.qsp.dhcp.Server.Grains.MessageParser;
-using qt.qsp.dhcp.Server.Grains.DhcpManager;
 using qt.qsp.dhcp.Server.Services;
 
 namespace qt.qsp.dhcp.Server.Workers;
 
-public class NetworkListener(IGrainFactory grainFactory, IDhcpServerService serverService)
-	: BackgroundService
+public class NetworkListener : BackgroundService
 {
+	private readonly IServiceProvider _serviceProvider;
+	private readonly IDhcpServerService _serverService;
+	private readonly ILogger<NetworkListener> _logger;
+
+	public NetworkListener(
+		IServiceProvider serviceProvider,
+		IDhcpServerService serverService,
+		ILogger<NetworkListener> logger)
+	{
+		_serviceProvider = serviceProvider;
+		_serverService = serverService;
+		_logger = logger;
+	}
 	#region BackgroundService
 	protected override async Task ExecuteAsync(CancellationToken stoppingToken)
 	{
@@ -20,14 +30,14 @@ public class NetworkListener(IGrainFactory grainFactory, IDhcpServerService serv
 			try
 			{
 				var incommingData = await listener.ReceiveAsync(stoppingToken);
-				
+
 				// Check if the DHCP server is enabled before processing requests
-				if (!serverService.IsEnabled)
+				if (!_serverService.IsEnabled)
 				{
 					continue;
 				}
-				
-				var incommingMessage = await ParseMessage(incommingData.Buffer);
+
+				var incommingMessage = ParseMessage(incommingData.Buffer);
 
 				var id = incommingMessage.GetClientId();
 				if (id is null)
@@ -35,7 +45,11 @@ public class NetworkListener(IGrainFactory grainFactory, IDhcpServerService serv
 					continue;
 				}
 
-				var responseMessage = await GetResponseMessage(id, incommingMessage);
+				// Create a scope for scoped services
+				using var scope = _serviceProvider.CreateScope();
+				var dhcpMessageHandler = scope.ServiceProvider.GetRequiredService<IDhcpMessageHandler>();
+
+				var responseMessage = await dhcpMessageHandler.HandleMessageAsync(incommingMessage, id);
 				if (responseMessage is null)
 				{
 					continue;
@@ -50,28 +64,22 @@ public class NetworkListener(IGrainFactory grainFactory, IDhcpServerService serv
 			}
 			catch (TaskCanceledException)
 			{
-				//TODO: log shutdown
+				_logger.LogInformation("DHCP Network Listener shutting down gracefully");
 			}
-			catch (SocketException)
+			catch (SocketException ex)
 			{
-				//TODO: handle error 
+				_logger.LogError(ex, "Socket error occurred while processing DHCP packets");
 			}
 		}
 	}
 	#endregion
 
 	#region data handling
-	private Task<DhcpMessage> ParseMessage(byte[] buffer)
+	private DhcpMessage ParseMessage(byte[] buffer)
 	{
-		var parserGrain = grainFactory.GetGrain<IMessageParserGrain>(Guid.NewGuid().ToString());
-		return parserGrain.Parse(buffer);
+		return DhcpMessage.Parse(buffer);
 	}
 
-	private Task<DhcpMessage?> GetResponseMessage(string id, DhcpMessage message)
-	{
-		var leaseGrain = grainFactory.GetGrain<IDhcpManagerGrain>(id);
-		return leaseGrain.HandleMessage(message);
-	}
 	private static Task<int> SendResponse(
 		DhcpMessage responseMessage,
 		UdpClient client,

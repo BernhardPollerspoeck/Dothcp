@@ -1,5 +1,5 @@
-using Orleans;
-using qt.qsp.dhcp.Server.Grains.DhcpManager;
+using qt.qsp.dhcp.Server.Models;
+using qt.qsp.dhcp.Server.Services.Core;
 using System.Net.NetworkInformation;
 using System.Diagnostics;
 using qt.qsp.dhcp.Server.Constants;
@@ -10,8 +10,7 @@ namespace qt.qsp.dhcp.Server.Services;
 
 public class DashboardService : IDashboardService
 {
-    private readonly IGrainFactory _grainFactory;
-    private readonly ILeaseGrainSearchService _leaseSearchService;
+    private readonly ILeaseService _leaseService;
     private readonly ILogger<DashboardService> _logger;
     private readonly ISettingsLoaderService _settingsLoader;
     private readonly INetworkUtilityService _networkUtility;
@@ -20,16 +19,14 @@ public class DashboardService : IDashboardService
     private static readonly DateTime _serverStartTime = DateTime.UtcNow;
 
     public DashboardService(
-        IGrainFactory grainFactory,
-        ILeaseGrainSearchService leaseSearchService,
+        ILeaseService leaseService,
         ILogger<DashboardService> logger,
         ISettingsLoaderService settingsLoader,
         INetworkUtilityService networkUtility,
         IDhcpServerService dhcpServerService,
         IWebHostEnvironment environment)
     {
-        _grainFactory = grainFactory;
-        _leaseSearchService = leaseSearchService;
+        _leaseService = leaseService;
         _logger = logger;
         _settingsLoader = settingsLoader;
         _networkUtility = networkUtility;
@@ -103,9 +100,15 @@ public class DashboardService : IDashboardService
             var binaryString = string.Concat(bytes.Select(b => Convert.ToString(b, 2).PadLeft(8, '0')));
             return binaryString.Count(c => c == '1');
         }
-        catch
+        catch (FormatException ex)
         {
+            _logger.LogWarning(ex, "Invalid subnet mask format: {subnetMask}, defaulting to /24", subnetMask);
             return 24; // Default to /24 if we can't parse
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, "Unexpected error parsing subnet mask: {subnetMask}", subnetMask);
+            return 24;
         }
     }
 
@@ -221,42 +224,26 @@ public class DashboardService : IDashboardService
 
             // Build the network base (first 3 octets)
             var networkBase = string.Join('.', routerBytes[0..^1]);
-            
+
             // Calculate actual address space
             var totalAddresses = maxAddress - minAddress + 1;
-            
+
             // Calculate network and broadcast addresses to exclude reserved IPs
             var networkAddress = _networkUtility.CalculateNetworkAddress($"{networkBase}.0", subnetMask);
             var broadcastAddress = _networkUtility.CalculateBroadcastAddress($"{networkBase}.0", subnetMask);
-            
-            var activeLeases = 0;
-            var reservedAddresses = 0;
 
-            // Check all IPs in the configured range
+            // Get active leases from service
+            var allLeases = await _leaseService.GetActiveLeasesAsync();
+            var activeLeases = allLeases.Count(l => !l.IsExpired());
+
+            // Count reserved addresses (network and broadcast in the range)
+            var reservedAddresses = 0;
             for (var i = minAddress; i <= maxAddress; i++)
             {
-                try
+                var ipAddress = $"{networkBase}.{i}";
+                if (_networkUtility.IsReservedIp(ipAddress, networkAddress, broadcastAddress))
                 {
-                    var ipAddress = $"{networkBase}.{i}";
-                    
-                    // Count reserved addresses (network and broadcast)
-                    if (_networkUtility.IsReservedIp(ipAddress, networkAddress, broadcastAddress))
-                    {
-                        reservedAddresses++;
-                        continue;
-                    }
-                    
-                    var leaseGrain = _grainFactory.GetGrain<IDhcpLeaseGrain>(ipAddress);
-                    var lease = await leaseGrain.GetLease();
-                    
-                    if (lease != null && lease.Status == LeaseStatus.Active && !lease.IsExpired())
-                    {
-                        activeLeases++;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogDebug(ex, "Error checking lease for IP {IpAddress}", $"{networkBase}.{i}");
+                    reservedAddresses++;
                 }
             }
 
@@ -276,13 +263,9 @@ public class DashboardService : IDashboardService
 
     private async Task<List<DhcpLease>> GetRecentLeasesAsync()
     {
-        var recentLeases = new List<DhcpLease>();
-
         try
         {
             // Get DHCP configuration from settings
-            var minAddress = await _settingsLoader.GetSetting<byte>(SettingsConstants.DHCP_RANGE_LOW);
-            var maxAddress = await _settingsLoader.GetSetting<byte>(SettingsConstants.DHCP_RANGE_HIGH);
             var routerBytes = await _settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER);
             var subnetMask = await _settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
 
@@ -290,47 +273,18 @@ public class DashboardService : IDashboardService
             if (routerBytes == null || string.IsNullOrEmpty(subnetMask))
             {
                 _logger.LogDebug("DHCP network settings not configured yet - returning empty recent leases");
-                return recentLeases;
+                return new List<DhcpLease>();
             }
 
-            // Build the network base (first 3 octets)
-            var networkBase = string.Join('.', routerBytes[0..^1]);
-            
-            // Calculate network and broadcast addresses to skip reserved IPs
-            var networkAddress = _networkUtility.CalculateNetworkAddress($"{networkBase}.0", subnetMask);
-            var broadcastAddress = _networkUtility.CalculateBroadcastAddress($"{networkBase}.0", subnetMask);
-            
-            // Check all IPs in the configured range for active leases
-            for (var i = minAddress; i <= maxAddress; i++)
-            {
-                try
-                {
-                    var ipAddress = $"{networkBase}.{i}";
-                    
-                    // Skip reserved addresses (network and broadcast)
-                    if (_networkUtility.IsReservedIp(ipAddress, networkAddress, broadcastAddress))
-                    {
-                        continue;
-                    }
-                    
-                    var leaseGrain = _grainFactory.GetGrain<IDhcpLeaseGrain>(ipAddress);
-                    var lease = await leaseGrain.GetLease();
-                    
-                    if (lease != null && lease.Status == LeaseStatus.Active)
-                    {
-                        recentLeases.Add(lease);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogDebug(ex, "Error getting lease for IP {IpAddress}", $"{networkBase}.{i}");
-                }
-            }
+            // Get active leases from service
+            var activeLeases = await _leaseService.GetActiveLeasesAsync();
 
-            // Sort by most recent lease start time and take the most recent 10
-            return recentLeases
+            // Convert to grain model and sort by most recent lease start time, take 10
+            return activeLeases
+                .Where(l => l.Status == Models.LeaseStatus.Active)
                 .OrderByDescending(l => l.LeaseStart)
                 .Take(10)
+                
                 .ToList();
         }
         catch (Exception ex)
@@ -347,8 +301,6 @@ public class DashboardService : IDashboardService
         try
         {
             // Get DHCP configuration from settings
-            var minAddress = await _settingsLoader.GetSetting<byte>(SettingsConstants.DHCP_RANGE_LOW);
-            var maxAddress = await _settingsLoader.GetSetting<byte>(SettingsConstants.DHCP_RANGE_HIGH);
             var routerBytes = await _settingsLoader.GetSetting<byte[]>(SettingsConstants.DHCP_LEASE_ROUTER);
             var subnetMask = await _settingsLoader.GetSetting<string>(SettingsConstants.DHCP_LEASE_SUBNET);
 
@@ -356,50 +308,20 @@ public class DashboardService : IDashboardService
             if (routerBytes == null || string.IsNullOrEmpty(subnetMask))
             {
                 _logger.LogDebug("DHCP network settings not configured yet - checking for development test leases");
-                
+
                 // Add test leases for development environment
                 if (_environment.IsDevelopment())
                 {
                     allLeases.AddRange(GetTestLeases());
                     _logger.LogInformation("Added {Count} test leases for development", allLeases.Count);
                 }
-                
+
                 return allLeases;
             }
 
-            // Build the network base (first 3 octets)
-            var networkBase = string.Join('.', routerBytes[0..^1]);
-            
-            // Calculate network and broadcast addresses to skip reserved IPs
-            var networkAddress = _networkUtility.CalculateNetworkAddress($"{networkBase}.0", subnetMask);
-            var broadcastAddress = _networkUtility.CalculateBroadcastAddress($"{networkBase}.0", subnetMask);
-            
-            // Check all IPs in the configured range for leases
-            for (var i = minAddress; i <= maxAddress; i++)
-            {
-                try
-                {
-                    var ipAddress = $"{networkBase}.{i}";
-                    
-                    // Skip reserved addresses (network and broadcast)
-                    if (_networkUtility.IsReservedIp(ipAddress, networkAddress, broadcastAddress))
-                    {
-                        continue;
-                    }
-                    
-                    var leaseGrain = _grainFactory.GetGrain<IDhcpLeaseGrain>(ipAddress);
-                    var lease = await leaseGrain.GetLease();
-                    
-                    if (lease != null)
-                    {
-                        allLeases.Add(lease);
-                    }
-                }
-                catch (Exception ex)
-                {
-                    _logger.LogDebug(ex, "Error getting lease for IP {IpAddress}", $"{networkBase}.{i}");
-                }
-            }
+            // Get all leases from service
+            var leases = await _leaseService.GetAllLeasesAsync();
+            allLeases.AddRange(leases);
 
             // Add test leases for development environment (in addition to real leases)
             if (_environment.IsDevelopment() && allLeases.Count < 5)
@@ -414,13 +336,13 @@ public class DashboardService : IDashboardService
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error getting all leases");
-            
+
             // Return test leases for development even on error
             if (_environment.IsDevelopment())
             {
                 return GetTestLeases();
             }
-            
+
             return [];
         }
     }
@@ -479,4 +401,4 @@ public class DashboardService : IDashboardService
 
         return testLeases;
     }
-}
+

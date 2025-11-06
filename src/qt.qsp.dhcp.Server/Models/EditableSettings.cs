@@ -35,5 +35,8 @@ public class EditableSettings
 	[Display(Name = "DNS Servers (semicolon separated)")]
 	public string Dns { get; set; } = string.Empty;
 
+	[Display(Name = "NTP Servers (semicolon separated)")]
+	public string NtpServers { get; set; } = string.Empty;
+
 	public bool IsModified { get; set; }
 }

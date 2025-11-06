@@ -2,9 +2,12 @@
 
 public class ClientInfo
 {
-	public bool HasAssignedAddress { get; set; }
-	public string? Address { get; set; }
-	public EClientState State { get; set; }
+	public string ClientId { get; set; } = string.Empty;
+	public string? AssignedIpAddress { get; set; }
+	public string State { get; set; } = EClientState.Unknown.ToString();
+	public DateTime LastSeen { get; set; }
+	public string? HostName { get; set; }
+	public string? DomainName { get; set; }
 }
 
 public enum EClientState

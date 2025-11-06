@@ -1,12 +1,12 @@
 ﻿@page "/settings"
-@using qt.qsp.dhcp.Server.Grains.Settings
 @using qt.qsp.dhcp.Server.Constants
 @using qt.qsp.dhcp.Server.Services
+@using qt.qsp.dhcp.Server.Services.Core
 @using qt.qsp.dhcp.Server.Models
 @using qt.qsp.dhcp.Server.Utilities
 @using System.ComponentModel.DataAnnotations
 
-@inject IClusterClient ClusterClient
+@inject IConfigurationService ConfigurationService
 @inject ISettingsService SettingsService
 @inject INetworkUtilityService NetworkUtilityService
 
@@ -166,6 +166,24 @@ else if (editableSettings != null)
 				</div>
 			</div>
 		</div>
+
+		<div class="row mt-3">
+			<div class="col-md-6">
+				<div class="card">
+					<div class="card-header">
+						<h5 class="mb-0">NTP Configuration</h5>
+					</div>
+					<div class="card-body">
+						<div class="mb-3">
+							<label for="ntpServers" class="form-label">NTP Servers (Optional)</label>
+							<InputTextArea id="ntpServers" class="form-control" rows="2" @bind-Value="editableSettings.NtpServers" placeholder="132.163.96.1;132.163.97.1" />
+							<ValidationMessage For="() => editableSettings.NtpServers" class="text-danger" />
+							<div class="form-text">NTP time server IP addresses, separated by semicolons</div>
+						</div>
+					</div>
+				</div>
+			</div>
+		</div>
 		
 		<div class="mt-4">
 			<div class="d-flex gap-2">
@@ -272,6 +290,7 @@ else if (editableSettings != null)
 			var subnetMask = await GetSettingsValue<string>(SettingsConstants.DHCP_LEASE_SUBNET);
 			var router = await GetSettingsValue<string>(SettingsConstants.DHCP_LEASE_ROUTER);
 			var dns = await GetSettingsValue<string[]>(SettingsConstants.DHCP_LEASE_DNS);
+			var ntpServers = await GetSettingsValue<string[]>(SettingsConstants.DHCP_LEASE_NTP_SERVERS);
 
 			editableSettings = new EditableSettings
 			{
@@ -282,7 +301,8 @@ else if (editableSettings != null)
 				RebindingTime = FormatTimeSpan(rebindingTime),
 				Subnet = subnetMask ?? "255.255.255.0", // This is actually the subnet mask
 				Router = router ?? string.Empty,
-				Dns = dns != null ? string.Join(";", dns) : string.Empty
+				Dns = dns != null ? string.Join(";", dns) : string.Empty,
+				NtpServers = ntpServers != null ? string.Join(";", ntpServers) : string.Empty
 			};
 
 			// Keep a copy of the original settings for cancel functionality
@@ -295,7 +315,8 @@ else if (editableSettings != null)
 				RebindingTime = editableSettings.RebindingTime,
 				Subnet = editableSettings.Subnet,
 				Router = editableSettings.Router,
-				Dns = editableSettings.Dns
+				Dns = editableSettings.Dns,
+				NtpServers = editableSettings.NtpServers
 			};
 		}
 		catch (Exception ex)
@@ -339,7 +360,8 @@ else if (editableSettings != null)
 				(SettingsConstants.DHCP_LEASE_REBINDING, editableSettings.RebindingTime),
 				(SettingsConstants.DHCP_LEASE_SUBNET, editableSettings.Subnet), // This is actually the subnet mask
 				(SettingsConstants.DHCP_LEASE_ROUTER, editableSettings.Router),
-				(SettingsConstants.DHCP_LEASE_DNS, editableSettings.Dns)
+				(SettingsConstants.DHCP_LEASE_DNS, editableSettings.Dns),
+				(SettingsConstants.DHCP_LEASE_NTP_SERVERS, editableSettings.NtpServers)
 			};
 
 			// Validate all settings first
@@ -390,7 +412,8 @@ else if (editableSettings != null)
 				RebindingTime = editableSettings.RebindingTime,
 				Subnet = editableSettings.Subnet,
 				Router = editableSettings.Router,
-				Dns = editableSettings.Dns
+				Dns = editableSettings.Dns,
+				NtpServers = editableSettings.NtpServers
 			};
 
 			editableSettings.IsModified = false;
@@ -420,9 +443,10 @@ else if (editableSettings != null)
 			editableSettings.Subnet = originalSettings.Subnet;
 			editableSettings.Router = originalSettings.Router;
 			editableSettings.Dns = originalSettings.Dns;
+			editableSettings.NtpServers = originalSettings.NtpServers;
 			editableSettings.IsModified = false;
 		}
-		
+
 		showSuccessMessage = false;
 		showErrorMessage = false;
 		StateHasChanged();
@@ -503,20 +527,15 @@ else if (editableSettings != null)
 
 	private async Task<TResult> GetSettingsValue<TResult>(string key)
 	{
-		return await ClusterClient
-			.GetGrain<ISettingsGrain>(key)
-			.GetValue<TResult>();
+		var value = await ConfigurationService.GetSettingAsync<TResult>(key);
+		return value ?? default!;
 	}
 
 	private async Task<TResult?> GetSettingsValueSafe<TResult>(string key) where TResult : class
 	{
 		try
 		{
-			var grain = ClusterClient.GetGrain<ISettingsGrain>(key);
-			if (await grain.HasValue())
-			{
-				return await grain.GetValue<TResult>();
-			}
+			return await ConfigurationService.GetSettingAsync<TResult>(key);
 		}
 		catch
 		{

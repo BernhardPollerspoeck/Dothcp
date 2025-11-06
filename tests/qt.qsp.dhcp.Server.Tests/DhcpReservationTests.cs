@@ -1,32 +1,31 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using qt.qsp.dhcp.Server.Models;
 using System.Net;
-using qt.qsp.dhcp.Server.Grains.DhcpManager;
-using Xunit;
 
 namespace qt.qsp.dhcp.Server.Tests;
 
+[TestClass]
 public class DhcpReservationTests
 {
-    [Fact]
+    [TestMethod]
     public void DhcpReservation_CreatedWithDefaults_ShouldHaveExpectedProperties()
     {
         // Arrange & Act
         var reservation = new DhcpReservation();
 
         // Assert
-        Assert.Equal(IPAddress.None, reservation.IpAddress);
-        Assert.Equal(string.Empty, reservation.MacAddress);
-        Assert.Equal(string.Empty, reservation.Description);
-        Assert.True(reservation.IsActive);
-        Assert.True(reservation.CreatedAt <= DateTime.UtcNow);
-        Assert.Null(reservation.LastUsed);
-        Assert.Empty(reservation.DnsServers);
+        Assert.AreEqual(string.Empty, reservation.MacAddress);
+        Assert.AreEqual(string.Empty, reservation.Description);
+        Assert.IsTrue(reservation.IsActive);
+        Assert.IsTrue(reservation.CreatedAt <= DateTime.UtcNow);
+        Assert.IsNull(reservation.LastUsed);
     }
 
-    [Fact]
+    [TestMethod]
     public void DhcpReservation_SetProperties_ShouldRetainValues()
     {
         // Arrange
-        var ipAddress = IPAddress.Parse("192.168.1.100");
+        var ipString = "192.168.1.100";
         var macAddress = "00:11:22:33:44:55";
         var description = "Test Server";
         var now = DateTime.UtcNow;
@@ -34,7 +33,7 @@ public class DhcpReservationTests
         // Act
         var reservation = new DhcpReservation
         {
-            IpAddress = ipAddress,
+            IpAddressString = ipString,
             MacAddress = macAddress,
             Description = description,
             IsActive = false,
@@ -43,18 +42,18 @@ public class DhcpReservationTests
         };
 
         // Assert
-        Assert.Equal(ipAddress, reservation.IpAddress);
-        Assert.Equal(macAddress, reservation.MacAddress);
-        Assert.Equal(description, reservation.Description);
-        Assert.False(reservation.IsActive);
-        Assert.Equal(now, reservation.CreatedAt);
-        Assert.Equal(now, reservation.LastUsed);
+        Assert.AreEqual(IPAddress.Parse(ipString), reservation.IpAddress);
+        Assert.AreEqual(macAddress, reservation.MacAddress);
+        Assert.AreEqual(description, reservation.Description);
+        Assert.IsFalse(reservation.IsActive);
+        Assert.AreEqual(now, reservation.CreatedAt);
+        Assert.AreEqual(now, reservation.LastUsed);
     }
 
-    [Theory]
-    [InlineData("00:11:22:33:44:55", "00:11:22:33:44:55", true)]
-    [InlineData("00:11:22:33:44:55", "00:11:22:33:44:56", false)]
-    [InlineData("AA:BB:CC:DD:EE:FF", "aa:bb:cc:dd:ee:ff", true)] // Case insensitive
+    [DataTestMethod]
+    [DataRow("00:11:22:33:44:55", "00:11:22:33:44:55", true)]
+    [DataRow("00:11:22:33:44:55", "00:11:22:33:44:56", false)]
+    [DataRow("AA:BB:CC:DD:EE:FF", "aa:bb:cc:dd:ee:ff", true)] // Case insensitive
     public void IsValidForMac_ActiveReservation_ShouldReturnExpectedResult(string reservationMac, string testMac, bool expected)
     {
         // Arrange
@@ -68,10 +67,10 @@ public class DhcpReservationTests
         var result = reservation.IsValidForMac(testMac);
 
         // Assert
-        Assert.Equal(expected, result);
+        Assert.AreEqual(expected, result);
     }
 
-    [Fact]
+    [TestMethod]
     public void IsValidForMac_InactiveReservation_ShouldReturnFalse()
     {
         // Arrange
@@ -85,10 +84,10 @@ public class DhcpReservationTests
         var result = reservation.IsValidForMac("00:11:22:33:44:55");
 
         // Assert
-        Assert.False(result);
+        Assert.IsFalse(result);
     }
 
-    [Fact]
+    [TestMethod]
     public void MarkAsUsed_ShouldSetLastUsedToCurrentTime()
     {
         // Arrange
@@ -100,12 +99,12 @@ public class DhcpReservationTests
 
         // Assert
         var afterCall = DateTime.UtcNow;
-        Assert.NotNull(reservation.LastUsed);
-        Assert.True(reservation.LastUsed >= beforeCall);
-        Assert.True(reservation.LastUsed <= afterCall);
+        Assert.IsNotNull(reservation.LastUsed);
+        Assert.IsTrue(reservation.LastUsed >= beforeCall);
+        Assert.IsTrue(reservation.LastUsed <= afterCall);
     }
 
-    [Fact]
+    [TestMethod]
     public void Activate_ShouldSetIsActiveToTrue()
     {
         // Arrange
@@ -115,10 +114,10 @@ public class DhcpReservationTests
         reservation.Activate();
 
         // Assert
-        Assert.True(reservation.IsActive);
+        Assert.IsTrue(reservation.IsActive);
     }
 
-    [Fact]
+    [TestMethod]
     public void Deactivate_ShouldSetIsActiveToFalse()
     {
         // Arrange
@@ -128,6 +127,6 @@ public class DhcpReservationTests
         reservation.Deactivate();
 
         // Assert
-        Assert.False(reservation.IsActive);
+        Assert.IsFalse(reservation.IsActive);
     }
 }

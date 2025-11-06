@@ -62,7 +62,12 @@ public enum EOption : byte
 	/// </summary>
 	NetBiosNameServer = 44,
 
-	AdressRequest = 50,
+	/// <summary>
+	/// 9.1. Requested IP Address
+	/// Client requests a specific IP address
+	/// Length = 4
+	/// </summary>
+	AddressRequest = 50,
 
 	/// <summary>
 	/// The time how long the lease it valid

@@ -1,24 +1,34 @@
-using qt.qsp.dhcp.Server.Grains.Settings;
+using qt.qsp.dhcp.Server.Services.Core;
 using qt.qsp.dhcp.Server.Constants;
 using qt.qsp.dhcp.Server.Utilities;
 using System.Net;
 
 namespace qt.qsp.dhcp.Server.Services;
 
-public class SettingsService(IGrainFactory grainFactory, INetworkUtilityService networkUtilityService) : ISettingsService
+public class SettingsService(IConfigurationService configurationService, INetworkUtilityService networkUtilityService) : ISettingsService
 {
-	public Task<TResult> GetSettingAsync<TResult>(string key)
+	public async Task<TResult> GetSettingAsync<TResult>(string key)
 	{
-		return grainFactory
-			.GetGrain<ISettingsGrain>(key)
-			.GetValue<TResult>();
+		var value = await configurationService.GetSettingAsync<TResult>(key);
+
+		// Allow null for optional settings
+		if (value == null)
+		{
+			// DNS and NTP servers are optional
+			if (key == SettingsConstants.DHCP_LEASE_DNS || key == SettingsConstants.DHCP_LEASE_NTP_SERVERS)
+			{
+				return default!;
+			}
+
+			throw new InvalidOperationException($"Required setting '{key}' is not configured. Please configure it in the Settings page.");
+		}
+
+		return value;
 	}
 
 	public Task SetSettingAsync(string key, string value)
 	{
-		return grainFactory
-			.GetGrain<ISettingsGrain>(key)
-			.SetValue(value);
+		return configurationService.SetSettingAsync(key, value);
 	}
 
 	public Task<bool> ValidateSettingAsync(string key, string value)
@@ -30,8 +40,8 @@ public class SettingsService(IGrainFactory grainFactory, INetworkUtilityService 
 	{
 		if (string.IsNullOrWhiteSpace(value))
 		{
-			// DNS is optional, so empty/null is valid
-			return key == SettingsConstants.DHCP_LEASE_DNS;
+			// DNS and NTP servers are optional, empty/null is valid
+			return key == SettingsConstants.DHCP_LEASE_DNS || key == SettingsConstants.DHCP_LEASE_NTP_SERVERS;
 		}
 
 		return key switch
@@ -44,6 +54,7 @@ public class SettingsService(IGrainFactory grainFactory, INetworkUtilityService 
 			SettingsConstants.DHCP_LEASE_SUBNET => IsValidSubnetMask(value),
 			SettingsConstants.DHCP_LEASE_ROUTER => IsValidIpAddress(value),
 			SettingsConstants.DHCP_LEASE_DNS => ValidateDnsServers(value),
+			SettingsConstants.DHCP_LEASE_NTP_SERVERS => ValidateNtpServers(value),
 			_ => true // Allow unknown settings for extensibility
 		};
 	}
@@ -61,7 +72,16 @@ public class SettingsService(IGrainFactory grainFactory, INetworkUtilityService 
 		var servers = dnsServers.Split(';', StringSplitOptions.RemoveEmptyEntries);
 		return servers.All(IsValidIpAddress);
 	}
-	
+
+	private static bool ValidateNtpServers(string ntpServers)
+	{
+		if (string.IsNullOrWhiteSpace(ntpServers))
+			return true; // NTP is optional
+
+		var servers = ntpServers.Split(';', StringSplitOptions.RemoveEmptyEntries);
+		return servers.All(IsValidIpAddress);
+	}
+
 	private static bool IsValidSubnetMask(string subnetMask)
 	{
 		if (!IPAddress.TryParse(subnetMask, out var ipAddress))
