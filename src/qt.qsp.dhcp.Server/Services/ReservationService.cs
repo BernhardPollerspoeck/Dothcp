@@ -1,5 +1,5 @@
-using Orleans;
 using qt.qsp.dhcp.Server.Grains.DhcpManager;
+using qt.qsp.dhcp.Server.Services.Core;
 using System.Net;
 using System.Text.Json;
 
@@ -7,12 +7,12 @@ namespace qt.qsp.dhcp.Server.Services;
 
 public class ReservationService : IReservationService
 {
-    private readonly IGrainFactory _grainFactory;
+    private readonly Core.IReservationService _reservationServiceCore;
     private readonly ILogger<ReservationService> _logger;
 
-    public ReservationService(IGrainFactory grainFactory, ILogger<ReservationService> logger)
+    public ReservationService(Core.IReservationService reservationServiceCore, ILogger<ReservationService> logger)
     {
-        _grainFactory = grainFactory;
+        _reservationServiceCore = reservationServiceCore;
         _logger = logger;
     }
 
@@ -20,8 +20,9 @@ public class ReservationService : IReservationService
     {
         try
         {
-            var managerGrain = _grainFactory.GetGrain<IDhcpReservationManagerGrain>(0);
-            return await managerGrain.GetAllReservations();
+            var reservations = await _reservationServiceCore.GetAllReservationsAsync();
+            // Convert from Models.DhcpReservation to Grains.DhcpManager.DhcpReservation
+            return reservations.Select(ConvertToGrainModel).ToList();
         }
         catch (Exception ex)
         {
@@ -34,8 +35,8 @@ public class ReservationService : IReservationService
     {
         try
         {
-            var managerGrain = _grainFactory.GetGrain<IDhcpReservationManagerGrain>(0);
-            return await managerGrain.GetReservationByMac(macAddress);
+            var reservation = await _reservationServiceCore.GetReservationByMacAsync(macAddress);
+            return reservation != null ? ConvertToGrainModel(reservation) : null;
         }
         catch (Exception ex)
         {
@@ -48,8 +49,8 @@ public class ReservationService : IReservationService
     {
         try
         {
-            var managerGrain = _grainFactory.GetGrain<IDhcpReservationManagerGrain>(0);
-            return await managerGrain.GetReservationByIp(ipAddress);
+            var reservation = await _reservationServiceCore.GetReservationByIpAsync(ipAddress);
+            return reservation != null ? ConvertToGrainModel(reservation) : null;
         }
         catch (Exception ex)
         {
@@ -62,34 +63,12 @@ public class ReservationService : IReservationService
     {
         try
         {
-            // Validate the reservation
-            if (string.IsNullOrWhiteSpace(reservation.MacAddress))
-            {
-                return (false, "MAC address is required");
-            }
-
-            if (string.IsNullOrEmpty(reservation.IpAddressString) || !IPAddress.TryParse(reservation.IpAddressString, out var _) || reservation.IpAddress.Equals(IPAddress.None))
-            {
-                return (false, "IP address is required");
-            }
-
-            var managerGrain = _grainFactory.GetGrain<IDhcpReservationManagerGrain>(0);
-            var success = await managerGrain.AddReservation(reservation);
-            
-            if (success)
-            {
-                _logger.LogInformation("Successfully added reservation for MAC {MacAddress} -> IP {IpAddress}", 
-                    reservation.MacAddress, reservation.IpAddress);
-                return (true, null);
-            }
-            else
-            {
-                return (false, "Failed to add reservation - check for conflicts");
-            }
+            var modelReservation = ConvertToModel(reservation);
+            return await _reservationServiceCore.AddReservationAsync(modelReservation);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to add reservation for MAC {MacAddress} -> IP {IpAddress}", 
+            _logger.LogError(ex, "Failed to add reservation for MAC {MacAddress} -> IP {IpAddress}",
                 reservation.MacAddress, reservation.IpAddress);
             return (false, ex.Message);
         }
@@ -99,34 +78,12 @@ public class ReservationService : IReservationService
     {
         try
         {
-            // Validate the reservation
-            if (string.IsNullOrWhiteSpace(reservation.MacAddress))
-            {
-                return (false, "MAC address is required");
-            }
-
-            if (string.IsNullOrEmpty(reservation.IpAddressString) || !IPAddress.TryParse(reservation.IpAddressString, out var _) || reservation.IpAddress.Equals(IPAddress.None))
-            {
-                return (false, "IP address is required");
-            }
-
-            var managerGrain = _grainFactory.GetGrain<IDhcpReservationManagerGrain>(0);
-            var success = await managerGrain.UpdateReservation(reservation);
-            
-            if (success)
-            {
-                _logger.LogInformation("Successfully updated reservation for MAC {MacAddress} -> IP {IpAddress}", 
-                    reservation.MacAddress, reservation.IpAddress);
-                return (true, null);
-            }
-            else
-            {
-                return (false, "Failed to update reservation");
-            }
+            var modelReservation = ConvertToModel(reservation);
+            return await _reservationServiceCore.UpdateReservationAsync(modelReservation);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to update reservation for MAC {MacAddress} -> IP {IpAddress}", 
+            _logger.LogError(ex, "Failed to update reservation for MAC {MacAddress} -> IP {IpAddress}",
                 reservation.MacAddress, reservation.IpAddress);
             return (false, ex.Message);
         }
@@ -136,18 +93,7 @@ public class ReservationService : IReservationService
     {
         try
         {
-            var managerGrain = _grainFactory.GetGrain<IDhcpReservationManagerGrain>(0);
-            var success = await managerGrain.DeleteReservation(ipAddress);
-            
-            if (success)
-            {
-                _logger.LogInformation("Successfully deleted reservation for IP {IpAddress}", ipAddress);
-                return (true, null);
-            }
-            else
-            {
-                return (false, "Failed to delete reservation");
-            }
+            return await _reservationServiceCore.DeleteReservationAsync(ipAddress);
         }
         catch (Exception ex)
         {
@@ -160,12 +106,12 @@ public class ReservationService : IReservationService
     {
         try
         {
-            var managerGrain = _grainFactory.GetGrain<IDhcpReservationManagerGrain>(0);
-            return await managerGrain.HasConflict(reservation);
+            var modelReservation = ConvertToModel(reservation);
+            return await _reservationServiceCore.HasConflictAsync(modelReservation);
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to check conflict for reservation MAC {MacAddress} -> IP {IpAddress}", 
+            _logger.LogError(ex, "Failed to check conflict for reservation MAC {MacAddress} -> IP {IpAddress}",
                 reservation.MacAddress, reservation.IpAddress);
             return (true, "Error checking for conflicts");
         }
@@ -175,8 +121,8 @@ public class ReservationService : IReservationService
     {
         try
         {
-            var managerGrain = _grainFactory.GetGrain<IDhcpReservationManagerGrain>(0);
-            return await managerGrain.GetReservationForMac(macAddress);
+            var reservation = await _reservationServiceCore.GetReservationByMacAsync(macAddress);
+            return reservation != null ? ConvertToGrainModel(reservation) : null;
         }
         catch (Exception ex)
         {
@@ -293,5 +239,52 @@ public class ReservationService : IReservationService
             _logger.LogError(ex, "Failed to import reservations from JSON");
             return (false, ex.Message, 0);
         }
+    }
+
+    // Helper methods to convert between Models.DhcpReservation and Grains.DhcpManager.DhcpReservation
+    private Models.DhcpReservation ConvertToModel(DhcpReservation grainReservation)
+    {
+        return new Models.DhcpReservation
+        {
+            MacAddress = grainReservation.MacAddress,
+            IpAddressString = grainReservation.IpAddressString,
+            Description = grainReservation.Description,
+            IsActive = grainReservation.IsActive,
+            CreatedAt = grainReservation.CreatedAt,
+            LastUsed = grainReservation.LastUsed,
+            SubnetString = grainReservation.SubnetString,
+            RouterString = grainReservation.RouterString,
+            DhcpServerString = grainReservation.DhcpServerString,
+            DnsServerStringsJson = grainReservation.DnsServerStrings.Count > 0
+                ? JsonSerializer.Serialize(grainReservation.DnsServerStrings)
+                : null
+        };
+    }
+
+    private DhcpReservation ConvertToGrainModel(Models.DhcpReservation modelReservation)
+    {
+        var grainReservation = new DhcpReservation
+        {
+            MacAddress = modelReservation.MacAddress,
+            IpAddressString = modelReservation.IpAddressString,
+            Description = modelReservation.Description,
+            IsActive = modelReservation.IsActive,
+            CreatedAt = modelReservation.CreatedAt,
+            LastUsed = modelReservation.LastUsed,
+            SubnetString = modelReservation.SubnetString,
+            RouterString = modelReservation.RouterString,
+            DhcpServerString = modelReservation.DhcpServerString
+        };
+
+        if (!string.IsNullOrEmpty(modelReservation.DnsServerStringsJson))
+        {
+            var dnsServers = JsonSerializer.Deserialize<List<string>>(modelReservation.DnsServerStringsJson);
+            if (dnsServers != null)
+            {
+                grainReservation.DnsServerStrings = dnsServers;
+            }
+        }
+
+        return grainReservation;
     }
 }

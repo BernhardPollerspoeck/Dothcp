@@ -1,24 +1,21 @@
-using qt.qsp.dhcp.Server.Grains.Settings;
+using qt.qsp.dhcp.Server.Services.Core;
 using qt.qsp.dhcp.Server.Constants;
 using qt.qsp.dhcp.Server.Utilities;
 using System.Net;
 
 namespace qt.qsp.dhcp.Server.Services;
 
-public class SettingsService(IGrainFactory grainFactory, INetworkUtilityService networkUtilityService) : ISettingsService
+public class SettingsService(IConfigurationService configurationService, INetworkUtilityService networkUtilityService) : ISettingsService
 {
-	public Task<TResult> GetSettingAsync<TResult>(string key)
+	public async Task<TResult> GetSettingAsync<TResult>(string key)
 	{
-		return grainFactory
-			.GetGrain<ISettingsGrain>(key)
-			.GetValue<TResult>();
+		var value = await configurationService.GetSettingAsync<TResult>(key);
+		return value ?? default!;
 	}
 
 	public Task SetSettingAsync(string key, string value)
 	{
-		return grainFactory
-			.GetGrain<ISettingsGrain>(key)
-			.SetValue(value);
+		return configurationService.SetSettingAsync(key, value);
 	}
 
 	public Task<bool> ValidateSettingAsync(string key, string value)

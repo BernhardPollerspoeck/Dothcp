@@ -1,6 +1,6 @@
-using Orleans;
 using qt.qsp.dhcp.Server.Constants;
 using qt.qsp.dhcp.Server.Services;
+using qt.qsp.dhcp.Server.Services.Core;
 using qt.qsp.dhcp.Server.Utilities;
 
 namespace qt.qsp.dhcp.Server.Grains.DhcpManager;
@@ -10,55 +10,67 @@ public class LeaseGrainSearchService : ILeaseGrainSearchService
     private readonly ILogger<LeaseGrainSearchService> _logger;
     private readonly ISettingsLoaderService _settingsLoader;
     private readonly INetworkUtilityService _networkUtility;
-    
+    private readonly ILeaseService _leaseService;
+
     public LeaseGrainSearchService(
         ILogger<LeaseGrainSearchService> logger,
         ISettingsLoaderService settingsLoader,
-        INetworkUtilityService networkUtility)
+        INetworkUtilityService networkUtility,
+        ILeaseService leaseService)
     {
         _logger = logger;
         _settingsLoader = settingsLoader;
         _networkUtility = networkUtility;
+        _leaseService = leaseService;
     }
-    
-    // Implementation to find a lease by MAC address
-    public async Task<DhcpLease?> FindLeaseByMac(IGrainFactory grainFactory, string macAddress, string ipRange)
-    {
-        var foundLeases = new List<DhcpLease>();
 
+    // Implementation to find a lease by MAC address
+    public async Task<DhcpLease?> FindLeaseByMac(string macAddress, string ipRange)
+    {
         try
         {
-            // Get DHCP configuration from settings
-            var minAddress = await _settingsLoader.GetSetting<byte>(SettingsConstants.DHCP_RANGE_LOW);
-            var maxAddress = await _settingsLoader.GetSetting<byte>(SettingsConstants.DHCP_RANGE_HIGH);
+            // Use LeaseService directly to find by MAC
+            var lease = await _leaseService.GetLeaseByMacAsync(macAddress);
 
-            // Iterate through the configured IP range instead of hardcoded 1-254
-            for (var i = minAddress; i <= maxAddress; i++)
+            if (lease != null && !lease.IsExpired())
             {
-                var ipToCheck = $"{ipRange}{i}";
-                var leaseGrain = grainFactory.GetGrain<IDhcpLeaseGrain>(ipToCheck);
-                
-                // Check if this grain has the MAC we're looking for
-                var mac = await leaseGrain.GetMacAddress();
-                if (mac == macAddress)
-                {
-                    var lease = await leaseGrain.GetLease();
-                    if (lease != null)
-                    {
-                        foundLeases.Add(lease);
-                        break; // Found what we're looking for, exit early
-                    }
-                }
+                // Convert from Models.DhcpLease to Grains.DhcpManager.DhcpLease
+                return ConvertToGrainModel(lease);
             }
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Error searching for lease by MAC address {MacAddress} in range {IpRange}", macAddress, ipRange);
+            _logger.LogError(ex, "Error searching for lease by MAC address {MacAddress}", macAddress);
         }
 
-        // Return the first active lease found for this MAC
-        return foundLeases
-            .OrderByDescending(l => l.LeaseStart) // Get the newest lease
-            .FirstOrDefault(l => l.Status != LeaseStatus.Expired);
+        return null;
+    }
+
+    private DhcpLease ConvertToGrainModel(Models.DhcpLease modelLease)
+    {
+        var grainLease = new DhcpLease
+        {
+            MacAddress = modelLease.MacAddress,
+            IpAddressString = modelLease.IpAddressString,
+            HostName = modelLease.HostName,
+            LeaseDuration = modelLease.LeaseDuration,
+            LeaseStart = modelLease.LeaseStart,
+            Status = (LeaseStatus)modelLease.Status,
+            SubnetString = modelLease.SubnetString,
+            RouterString = modelLease.RouterString,
+            DhcpServerString = modelLease.DhcpServerString
+        };
+
+        // Convert DNS servers
+        if (!string.IsNullOrEmpty(modelLease.DnsServerStringsJson))
+        {
+            var dnsServers = System.Text.Json.JsonSerializer.Deserialize<List<string>>(modelLease.DnsServerStringsJson);
+            if (dnsServers != null)
+            {
+                grainLease.DnsServerStrings = dnsServers;
+            }
+        }
+
+        return grainLease;
     }
 }

@@ -1,5 +1,5 @@
 using qt.qsp.dhcp.Server.Constants;
-using qt.qsp.dhcp.Server.Grains.Settings;
+using qt.qsp.dhcp.Server.Services.Core;
 
 namespace qt.qsp.dhcp.Server.Services;
 
@@ -9,23 +9,20 @@ public interface IFirstRunService
 	Task MarkSetupCompletedAsync();
 }
 
-public class FirstRunService(IClusterClient clusterClient) : IFirstRunService
+public class FirstRunService(IConfigurationService configurationService) : IFirstRunService
 {
 	public async Task<bool> IsFirstRunAsync()
 	{
 		try
 		{
 			// Check if core required settings exist
-			var subnetGrain = clusterClient.GetGrain<ISettingsGrain>(SettingsConstants.DHCP_LEASE_SUBNET);
-			var routerGrain = clusterClient.GetGrain<ISettingsGrain>(SettingsConstants.DHCP_LEASE_ROUTER);
-			var rangeLowGrain = clusterClient.GetGrain<ISettingsGrain>(SettingsConstants.DHCP_RANGE_LOW);
-			var rangeHighGrain = clusterClient.GetGrain<ISettingsGrain>(SettingsConstants.DHCP_RANGE_HIGH);
-			
+			var hasSubnet = await configurationService.HasSettingAsync(SettingsConstants.DHCP_LEASE_SUBNET);
+			var hasRouter = await configurationService.HasSettingAsync(SettingsConstants.DHCP_LEASE_ROUTER);
+			var hasRangeLow = await configurationService.HasSettingAsync(SettingsConstants.DHCP_RANGE_LOW);
+			var hasRangeHigh = await configurationService.HasSettingAsync(SettingsConstants.DHCP_RANGE_HIGH);
+
 			// If any of the core settings are missing, it's a first run
-			return !await subnetGrain.HasValue() || 
-			       !await routerGrain.HasValue() ||
-			       !await rangeLowGrain.HasValue() ||
-			       !await rangeHighGrain.HasValue();
+			return !hasSubnet || !hasRouter || !hasRangeLow || !hasRangeHigh;
 		}
 		catch
 		{

@@ -1,16 +1,15 @@
-﻿using qt.qsp.dhcp.Server.Grains.Settings;
+﻿using qt.qsp.dhcp.Server.Services.Core;
 
 namespace qt.qsp.dhcp.Server.Services;
 
-public class SettingsLoaderService(IGrainFactory grainFactory)
+public class SettingsLoaderService(IConfigurationService configurationService)
 	: ISettingsLoaderService
 {
 	#region ISettingsLoaderService
-	public Task<TResult> GetSetting<TResult>(string key)
+	public async Task<TResult> GetSetting<TResult>(string key)
 	{
-		return grainFactory
-			.GetGrain<ISettingsGrain>(key)
-			.GetValue<TResult>();
+		var value = await configurationService.GetSettingAsync<TResult>(key);
+		return value ?? default!;
 	}
 	#endregion
 }
