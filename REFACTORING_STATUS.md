@@ -35,36 +35,47 @@
 - ✅ Orleans Pakete aus .csproj entfernt
 - ✅ EF Core SQLite Pakete hinzugefügt
 
+## Services aktualisiert (Teil 2)
+- ✅ DashboardService - verwendet jetzt ILeaseService statt IGrainFactory
+- ✅ LeaseGrainSearchService - verwendet jetzt ILeaseService für Lease-Suche
+- ✅ OfferGeneratorService - alle Orleans-Abhängigkeiten entfernt
+- ✅ NetworkListener - verwendet jetzt DhcpMessageHandler statt Grains
+- ✅ DhcpMessageHandler (NEU) - ersetzt DhcpManagerGrain mit vollständiger DHCP-Logik
+
+## Razor Components aktualisiert
+- ✅ Settings.razor - verwendet jetzt IConfigurationService statt IClusterClient
+- ✅ Leases.razor - verwendet jetzt ILeaseService statt IGrainFactory
+- ✅ FirstTimeSetup.razor - verwendet jetzt IConfigurationService statt IClusterClient
+
+## Grain-Dateien entfernt
+- ✅ Grains/DhcpManager/* - alle Grains entfernt (DhcpLeaseGrain, DhcpManagerGrain, DhcpReservationGrain, etc.)
+- ✅ Grains/IpAddress/* - alle Grains entfernt
+- ✅ Grains/Settings/* - alle Grains entfernt
+- ✅ Grains/MessageParser/* - MessageParserGrain entfernt
+- ✅ FileStorage/* - komplett gelöscht (Orleans-spezifisch)
+
 ## Noch zu tun ⚠️
-
-### Services die noch Orleans-Code enthalten
-1. **DashboardService** - verwendet IGrainFactory und ILeaseGrainSearchService
-2. **LeaseGrainSearchService** - verwendet IGrainFactory für Lease-Suche
-3. **OfferGeneratorService** - verwendet IGrainFactory für DhcpLeaseGrain, IpAddressInformationGrain, etc.
-4. **NetworkListener** - verwendet IGrainFactory für MessageParserGrain und DhcpManagerGrain
-
-### Grain-Dateien
-- Grains/DhcpManager/* - sollten entweder entfernt oder zu normalen Services konvertiert werden
-- Grains/IpAddress/* - sollten entfernt werden
-- Grains/Settings/* - sollten entfernt werden
-- Grains/MessageParser/* - sollte entfernt oder konvertiert werden
-- FileStorage/* - kann komplett gelöscht werden (Orleans-spezifisch)
 
 ### Tests
 - Tests von xUnit auf MSTest portieren
 - Neue Tests für alle Core Services schreiben
 - Bestehende Tests anpassen (ReservationServiceTests, etc.)
 
+### Weitere Aufgaben
+- End-to-End Testing durchführen
+- Sicherstellen dass alle DHCP-Funktionen korrekt funktionieren
+
 ## Nächste Schritte
 
-1. DashboardService aktualisieren
-2. LeaseGrainSearchService aktualisieren
-3. OfferGeneratorService aktualisieren (komplex!)
-4. NetworkListener aktualisieren (komplex!)
-5. Grain-Dateien löschen
-6. FileStorage-Ordner löschen
-7. Tests auf MSTest portieren
-8. Testen und Bugs fixen
+1. ✅ ~~DashboardService aktualisieren~~
+2. ✅ ~~LeaseGrainSearchService aktualisieren~~
+3. ✅ ~~OfferGeneratorService aktualisieren~~
+4. ✅ ~~NetworkListener aktualisieren~~
+5. ✅ ~~Grain-Dateien löschen~~
+6. ✅ ~~FileStorage-Ordner löschen~~
+7. ✅ ~~Razor Components aktualisieren~~
+8. Tests auf MSTest portieren
+9. End-to-End Testing durchführen
 
 ## Architektur-Änderungen
 
