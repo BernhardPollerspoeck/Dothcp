@@ -23,8 +23,10 @@ public class DhcpDbContext : DbContext
         modelBuilder.Entity<DhcpLease>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.HasIndex(e => e.MacAddress);
-            entity.HasIndex(e => e.IpAddressString);
+            entity.HasIndex(e => e.MacAddress);  // Frequent lookup by MAC
+            entity.HasIndex(e => e.IpAddressString);  // Frequent lookup by IP
+            entity.HasIndex(e => e.Status);  // Dashboard statistics and filtering
+            entity.HasIndex(e => e.LeaseStart);  // Expired lease queries
             entity.Property(e => e.MacAddress).IsRequired();
             entity.Property(e => e.IpAddressString).IsRequired();
             entity.Ignore(e => e.IpAddress);
@@ -39,8 +41,9 @@ public class DhcpDbContext : DbContext
         modelBuilder.Entity<DhcpReservation>(entity =>
         {
             entity.HasKey(e => e.Id);
-            entity.HasIndex(e => e.MacAddress).IsUnique();
-            entity.HasIndex(e => e.IpAddressString).IsUnique();
+            entity.HasIndex(e => e.MacAddress).IsUnique();  // One reservation per MAC
+            entity.HasIndex(e => e.IpAddressString).IsUnique();  // One reservation per IP
+            entity.HasIndex(e => e.IsActive);  // Filter active reservations
             entity.Property(e => e.MacAddress).IsRequired();
             entity.Property(e => e.IpAddressString).IsRequired();
             entity.Ignore(e => e.IpAddress);

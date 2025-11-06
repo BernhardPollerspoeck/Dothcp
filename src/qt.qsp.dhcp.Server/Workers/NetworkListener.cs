@@ -64,11 +64,11 @@ public class NetworkListener : BackgroundService
 			}
 			catch (TaskCanceledException)
 			{
-				//TODO: log shutdown
+				_logger.LogInformation("DHCP Network Listener shutting down gracefully");
 			}
-			catch (SocketException)
+			catch (SocketException ex)
 			{
-				//TODO: handle error 
+				_logger.LogError(ex, "Socket error occurred while processing DHCP packets");
 			}
 		}
 	}

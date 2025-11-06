@@ -11,7 +11,6 @@ namespace qt.qsp.dhcp.Server.Services;
 public class DashboardService : IDashboardService
 {
     private readonly ILeaseService _leaseService;
-    private readonly ILeaseGrainSearchService _leaseSearchService;
     private readonly ILogger<DashboardService> _logger;
     private readonly ISettingsLoaderService _settingsLoader;
     private readonly INetworkUtilityService _networkUtility;
@@ -21,7 +20,6 @@ public class DashboardService : IDashboardService
 
     public DashboardService(
         ILeaseService leaseService,
-        ILeaseGrainSearchService leaseSearchService,
         ILogger<DashboardService> logger,
         ISettingsLoaderService settingsLoader,
         INetworkUtilityService networkUtility,
@@ -29,7 +27,6 @@ public class DashboardService : IDashboardService
         IWebHostEnvironment environment)
     {
         _leaseService = leaseService;
-        _leaseSearchService = leaseSearchService;
         _logger = logger;
         _settingsLoader = settingsLoader;
         _networkUtility = networkUtility;

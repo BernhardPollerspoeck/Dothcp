@@ -73,6 +73,8 @@ public class DhcpMessageHandler : IDhcpMessageHandler
         };
 
         clientInfo.LastSeen = DateTime.UtcNow;
+        clientInfo.HostName = message.GetHostname();
+        clientInfo.DomainName = message.GetDomainName();
 
         // Check reservations first - highest priority
         var offerFromReservation = await _offerGeneratorService.TryCreateOfferFromReservation(message, clientInfo, clientId);
@@ -194,6 +196,8 @@ public class DhcpMessageHandler : IDhcpMessageHandler
         clientInfo.AssignedIpAddress = requestedIp;
         clientInfo.State = EClientState.Assigned.ToString();
         clientInfo.LastSeen = DateTime.UtcNow;
+        clientInfo.HostName = message.GetHostname();
+        clientInfo.DomainName = message.GetDomainName();
         await _clientRepository.AddOrUpdateAsync(clientInfo);
 
         // Get the lease duration from settings
